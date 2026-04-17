@@ -4,6 +4,8 @@ A self-hosted web app and CLI toolkit for tracking macOS application releases. I
 
 Originally built for Microsoft Mac apps (Company Portal, Defender, Edge, Office), it can track **any** macOS application that distributes a downloadable PKG or ZIP.
 
+**Live demo:** see it running at [appledevicepolicy.tools/app-tracker](https://appledevicepolicy.tools/app-tracker).
+
 ## Features
 
 - **Automatic hourly checks** with header-aware change detection (ETag / Last-Modified) to skip redundant downloads
