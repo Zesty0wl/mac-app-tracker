@@ -1,7 +1,13 @@
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Injected from the `GIT_SHA` env var when you run
+        #   GIT_SHA=$(git rev-parse --short HEAD) docker compose build
+        # Safe to leave empty - the app falls back to reading .git at runtime.
+        GIT_SHA: ${GIT_SHA:-}
     container_name: intune-mac-tracker
     ports:
       - "5000:5000"

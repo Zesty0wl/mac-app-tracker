@@ -14,6 +14,15 @@
     To fully replace the markup, drop a file at
     ${TEMPLATE_OVERRIDE_DIR}/_footer.html.
 #}
+{% if app_version %}
+<div class="site-version" aria-label="Application version">
+    {% if source_url %}
+    <a href="{{ source_url }}/releases" target="_blank" rel="noopener">v{{ app_version }}</a>
+    {% else %}
+    v{{ app_version }}
+    {% endif %}
+</div>
+{% endif %}
 <footer class="site-footer">
     <div class="site-footer__inner">
         {% if footer_logo_url or footer_attribution %}

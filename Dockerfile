@@ -17,6 +17,7 @@ COPY web_app.py .
 COPY scheduler.py .
 COPY enhanced_tracker.py .
 COPY requirements.txt .
+COPY VERSION .
 COPY .env .
 COPY templates/ templates/
 COPY static/ static/
@@ -29,6 +30,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Create necessary directories
 RUN mkdir -p downloads /data
+
+# Bake the git short SHA into the image so the footer can display it.
+# Override at build time: `docker compose build --build-arg GIT_SHA=$(git rev-parse --short HEAD)`
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
 
 # Set environment variables
 ENV DB_PATH=/data/microsoft_apps_versions.db

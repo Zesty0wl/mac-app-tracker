@@ -123,3 +123,23 @@
         gap: 0.75rem;
     }
 }
+
+/* Version indicator shown above the footer */
+.site-version {
+    text-align: center;
+    padding: 0.75rem 1rem 0;
+    font-size: 0.75rem;
+    color: var(--footer-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.site-version a {
+    color: var(--footer-muted);
+    text-decoration: none;
+    opacity: 0.8;
+}
+
+.site-version a:hover {
+    color: var(--footer-link);
+    opacity: 1;
+}

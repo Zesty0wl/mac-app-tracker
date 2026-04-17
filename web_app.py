@@ -20,6 +20,49 @@ from admin import admin_bp
 import os
 import json
 import logging
+import subprocess
+from pathlib import Path
+
+
+def _load_app_version() -> str:
+    """Resolve the app version string shown in the footer.
+
+    Resolution order:
+      1. ``APP_VERSION`` env var (useful in CI / when building images)
+      2. ``VERSION`` file shipped with the repo (semver, e.g. ``1.2.3``)
+      3. Fallback: ``0.0.0``
+
+    If a short git SHA is available (baked into the image as ``GIT_SHA`` or
+    read from the local ``.git`` repo during development), it is appended
+    as ``+<sha>``.
+    """
+    version = os.environ.get('APP_VERSION', '').strip()
+    if not version:
+        version_file = Path(__file__).resolve().parent / 'VERSION'
+        try:
+            version = version_file.read_text(encoding='utf-8').strip()
+        except OSError:
+            version = ''
+    if not version:
+        version = '0.0.0'
+
+    sha = os.environ.get('GIT_SHA', '').strip()
+    if not sha:
+        try:
+            sha = subprocess.check_output(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                cwd=str(Path(__file__).resolve().parent),
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            ).decode().strip()
+        except (OSError, subprocess.SubprocessError):
+            sha = ''
+    if sha:
+        return f'{version}+{sha}'
+    return version
+
+
+APP_VERSION = _load_app_version()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
@@ -225,6 +268,11 @@ def inject_branding():
         ]),
         'source_url': os.environ.get('SOURCE_URL', _DEFAULT_SOURCE_URL),
     }
+
+
+@app.context_processor
+def inject_version():
+    return {'app_version': APP_VERSION}
 
 
 def get_display_name(package_identifier: str) -> str:
