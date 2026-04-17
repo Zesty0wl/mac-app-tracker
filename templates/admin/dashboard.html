@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Admin Dashboard — App Tracker</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+        .stat-card { background: #fff; border-radius: 10px; padding: 1.25rem;
+                     box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        .stat-card .label { font-size: .8rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+        .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: .25rem; }
+        .section { background: #fff; border-radius: 10px; padding: 1.5rem;
+                   box-shadow: 0 1px 6px rgba(0,0,0,.06); margin-bottom: 1.5rem; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+        th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid #e5e7eb; }
+        th { font-weight: 600; color: #6b7280; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px; font-size: .75rem; font-weight: 600; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-gray { background: #e5e7eb; color: #4b5563; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .btn { display: inline-block; padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+               font-weight: 500; text-decoration: none; cursor: pointer; border: none; transition: background .15s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        a.btn-primary { color: #fff; }
+        .text-muted { color: #6b7280; font-size: .8rem; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}" class="active">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}">Apps</a>
+            <a href="{{ url_for('admin.email_page') }}">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}">Logs</a>
+            <a href="{{ url_for('index') }}">← Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="grid">
+            <div class="stat-card">
+                <div class="label">Tracked Apps</div>
+                <div class="value" id="stat-apps">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Versions</div>
+                <div class="value" id="stat-versions">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Last Check</div>
+                <div class="value" id="stat-lastcheck" style="font-size:1rem;">—</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Recent Activity</h2>
+            <table>
+                <thead><tr><th>Time</th><th>Level</th><th>Source</th><th>Message</th></tr></thead>
+                <tbody id="log-body"><tr><td colspan="4" class="text-muted">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const base = location.pathname.replace(/\/admin\/.*$/, '');
+        async function apiFetch(path, opts) {
+            const r = await fetch(base + '/admin/api' + path, opts);
+            if (r.status === 401) { location.href = base + '/admin/login'; return null; }
+            return r.json();
+        }
+
+        async function loadDashboard() {
+            // Stats from public API
+            try {
+                const stats = await (await fetch(base + '/api/stats')).json();
+                document.getElementById('stat-apps').textContent = stats.apps_tracked;
+                document.getElementById('stat-versions').textContent = stats.total_versions;
+                document.getElementById('stat-lastcheck').textContent =
+                    stats.last_check ? new Date(stats.last_check).toLocaleString() : 'Never';
+            } catch(e) { console.error(e); }
+
+            // Check if DB has any tracked apps
+            const apps = await apiFetch('/apps');
+
+            // Recent logs
+            const logs = await apiFetch('/logs?limit=15');
+            if (logs) renderLogs(logs);
+        }
+
+        function renderLogs(logs) {
+            const tbody = document.getElementById('log-body');
+            if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-muted">No logs yet</td></tr>'; return; }
+            tbody.innerHTML = logs.map(l => {
+                const cls = l.level === 'ERROR' ? 'badge-red' : l.level === 'WARN' ? 'badge-yellow' : 'badge-blue';
+                const time = new Date(l.timestamp).toLocaleString();
+                return `<tr><td class="text-muted">${time}</td><td><span class="badge ${cls}">${l.level}</span></td><td>${l.source}</td><td>${l.message}</td></tr>`;
+            }).join('');
+        }
+
+
+        loadDashboard();
+    </script>
+</body>
+</html>

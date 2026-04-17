@@ -1,0 +1,76 @@
+# Add the downloads directory to gitignore
+downloads/
+*.pkg
+
+# Local docker-compose overrides (deployment-specific, not for OSS)
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db.backup
+*.sqlite
+*.sqlite3
+
+# Data directory
+data/
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+work/
+work_*/
+
+# Environment files with secrets
+.env
+
+# Backups
+backups/
+
+# Email virtual environment
+email_env/
+
+# Debug artifacts
+debug/
+
+# Deployment-specific projects
+other_projects/

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Manage Apps — App Tracker Admin</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+        .toolbar h2 { font-size: 1.2rem; }
+        .btn { display: inline-block; padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+               font-weight: 500; text-decoration: none; cursor: pointer; border: none; transition: background .15s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-sm { padding: .35rem .75rem; font-size: .8rem; }
+        table { width: 100%; border-collapse: collapse; font-size: .875rem; background: #fff;
+                border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        th, td { text-align: left; padding: .65rem .75rem; border-bottom: 1px solid #e5e7eb; }
+        th { font-weight: 600; color: #6b7280; font-size: .75rem; text-transform: uppercase;
+             letter-spacing: .04em; background: #f9fafb; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px;
+                 font-size: .75rem; font-weight: 600; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-gray { background: #e5e7eb; color: #4b5563; }
+        .actions { display: flex; gap: .5rem; }
+
+        /* Modal */
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+                          z-index: 100; align-items: center; justify-content: center; }
+        .modal-backdrop.open { display: flex; }
+        .modal { background: #fff; border-radius: 12px; padding: 2rem; width: 100%; max-width: 560px;
+                 box-shadow: 0 8px 32px rgba(0,0,0,.15); max-height: 90vh; overflow-y: auto; }
+        .modal h2 { font-size: 1.25rem; margin-bottom: 1.25rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: .25rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: .5rem .75rem; border: 1px solid #d1d5db; border-radius: 8px;
+            font-size: .9rem; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+        .form-group textarea { resize: vertical; min-height: 60px; }
+        .form-group .hint { font-size: .75rem; color: #9ca3af; margin-top: .2rem; }
+        .form-actions { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; }
+        .form-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
+                      border-radius: 8px; padding: .6rem; margin-bottom: 1rem; font-size: .85rem; display: none; }
+        .text-muted { color: #6b7280; }
+        .enabled-toggle { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}" class="active">Apps</a>
+            <a href="{{ url_for('admin.email_page') }}">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}">Logs</a>
+            <a href="{{ url_for('index') }}">← Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="toolbar">
+            <h2>Tracked Applications</h2>
+            <button class="btn btn-primary" onclick="openAddModal()">+ Add App</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>App ID</th>
+                    <th>Identifier</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="apps-body">
+                <tr><td colspan="6" class="text-muted">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Add / Edit Modal -->
+    <div class="modal-backdrop" id="modal">
+        <div class="modal">
+            <h2 id="modal-title">Add Application</h2>
+            <div class="form-error" id="form-error"></div>
+            <form id="app-form" onsubmit="return saveApp(event)">
+                <input type="hidden" id="f-mode" value="add">
+                <input type="hidden" id="f-orig-id" value="">
+                <div class="form-group">
+                    <label for="f-app-id">App ID</label>
+                    <input type="text" id="f-app-id" required pattern="[a-z0-9_-]+" placeholder="e.g. companyportal">
+                    <div class="hint">Lowercase slug — used in URLs and config. Cannot be changed after creation.</div>
+                </div>
+                <div class="form-group">
+                    <label for="f-name">Display Name</label>
+                    <input type="text" id="f-name" required placeholder="e.g. Company Portal">
+                </div>
+                <div class="form-group">
+                    <label for="f-url">Download URL</label>
+                    <input type="url" id="f-url" required placeholder="https://go.microsoft.com/fwlink/?linkid=…">
+                </div>
+                <div class="form-group">
+                    <label for="f-identifier">Package Identifier</label>
+                    <input type="text" id="f-identifier" required placeholder="com.microsoft.CompanyPortalMac">
+                </div>
+                <div class="form-group">
+                    <label for="f-description">Description</label>
+                    <textarea id="f-description" placeholder="Short description of the app"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="f-type">Package Type</label>
+                    <select id="f-type">
+                        <option value="single">Single</option>
+                        <option value="suite">Suite</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="f-url-type">URL Type</label>
+                    <select id="f-url-type">
+                        <option value="direct">Direct (PKG / DMG link)</option>
+                        <option value="metadata_json">Metadata JSON</option>
+                    </select>
+                </div>
+                <div class="form-group" id="f-enabled-group" style="display:none;">
+                    <label>
+                        <input type="checkbox" id="f-enabled" checked> Enabled
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="save-btn">Add App</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const base = location.pathname.replace(/\/admin\/.*$/, '');
+        async function apiFetch(path, opts) {
+            const r = await fetch(base + '/admin/api' + path, opts);
+            if (r.status === 401) { location.href = base + '/admin/login'; return null; }
+            return r;
+        }
+
+        async function loadApps() {
+            const r = await apiFetch('/apps');
+            const apps = await r.json();
+            const tbody = document.getElementById('apps-body');
+            if (!apps.length) {
+                tbody.innerHTML = '<tr><td colspan=\"6\" class=\"text-muted\">No apps configured yet. Click \"Add App\" to get started.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = apps.map(a => `
+                <tr>
+                    <td><strong>${esc(a.name)}</strong></td>
+                    <td><code>${esc(a.app_id)}</code></td>
+                    <td style="font-size:.8rem;">${esc(a.identifier)}</td>
+                    <td><span class="badge badge-gray">${esc(a.type)}</span></td>
+                    <td><span class="badge ${a.enabled ? 'badge-green' : 'badge-gray'}">${a.enabled ? 'Active' : 'Disabled'}</span></td>
+                    <td class="actions">
+                        <button class="btn btn-secondary btn-sm" onclick='openEditModal(${JSON.stringify(a)})'>Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteApp('${esc(a.app_id)}','${esc(a.name)}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function openAddModal() {
+            document.getElementById('modal-title').textContent = 'Add Application';
+            document.getElementById('save-btn').textContent = 'Add App';
+            document.getElementById('f-mode').value = 'add';
+            document.getElementById('f-orig-id').value = '';
+            document.getElementById('f-app-id').value = '';
+            document.getElementById('f-app-id').readOnly = false;
+            document.getElementById('f-name').value = '';
+            document.getElementById('f-url').value = '';
+            document.getElementById('f-identifier').value = '';
+            document.getElementById('f-description').value = '';
+            document.getElementById('f-type').value = 'single';
+            document.getElementById('f-url-type').value = 'direct';
+            document.getElementById('f-enabled-group').style.display = 'none';
+            document.getElementById('form-error').style.display = 'none';
+            document.getElementById('modal').classList.add('open');
+        }
+
+        function openEditModal(a) {
+            document.getElementById('modal-title').textContent = 'Edit Application';
+            document.getElementById('save-btn').textContent = 'Save Changes';
+            document.getElementById('f-mode').value = 'edit';
+            document.getElementById('f-orig-id').value = a.app_id;
+            document.getElementById('f-app-id').value = a.app_id;
+            document.getElementById('f-app-id').readOnly = true;
+            document.getElementById('f-name').value = a.name;
+            document.getElementById('f-url').value = a.url;
+            document.getElementById('f-identifier').value = a.identifier;
+            document.getElementById('f-description').value = a.description || '';
+            document.getElementById('f-type').value = a.type || 'single';
+            document.getElementById('f-url-type').value = a.url_type || 'direct';
+            document.getElementById('f-enabled').checked = !!a.enabled;
+            document.getElementById('f-enabled-group').style.display = 'block';
+            document.getElementById('form-error').style.display = 'none';
+            document.getElementById('modal').classList.add('open');
+        }
+
+        function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+        async function saveApp(e) {
+            e.preventDefault();
+            const mode = document.getElementById('f-mode').value;
+            const errEl = document.getElementById('form-error');
+            errEl.style.display = 'none';
+
+            const payload = {
+                app_id: document.getElementById('f-app-id').value.trim(),
+                name: document.getElementById('f-name').value.trim(),
+                url: document.getElementById('f-url').value.trim(),
+                identifier: document.getElementById('f-identifier').value.trim(),
+                description: document.getElementById('f-description').value.trim(),
+                type: document.getElementById('f-type').value,
+                url_type: document.getElementById('f-url-type').value,
+                enabled: document.getElementById('f-enabled').checked ? 1 : 0,
+            };
+
+            let r;
+            if (mode === 'add') {
+                r = await apiFetch('/apps', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            } else {
+                const origId = document.getElementById('f-orig-id').value;
+                r = await apiFetch('/apps/' + origId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            }
+
+            if (!r) return false;
+            if (r.ok) { closeModal(); loadApps(); }
+            else {
+                const data = await r.json();
+                errEl.textContent = data.error || 'An error occurred';
+                errEl.style.display = 'block';
+            }
+            return false;
+        }
+
+        async function deleteApp(appId, name) {
+            if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+            const r = await apiFetch('/apps/' + appId, { method: 'DELETE' });
+            if (r && r.ok) loadApps();
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        loadApps();
+    </script>
+</body>
+</html>

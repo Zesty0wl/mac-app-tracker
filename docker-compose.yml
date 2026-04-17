@@ -1,0 +1,27 @@
+
+services:
+  app:
+    build: .
+    container_name: intune-mac-tracker
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist the database
+      - ./data:/data
+      # Optional: mount a directory of Jinja2 templates that override the
+      # bundled ones (e.g. _header.html, _footer.html). Uncomment to enable.
+      #- ./branding/templates_override:/app/templates_override:ro
+      # Optional: replace the bundled footer logo.
+      #- ./branding/footer-logo.svg:/app/static/img/footer-logo.svg:ro
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/data/microsoft_apps_versions.db
+      - SUBSCRIPTION_DB_PATH=/data/subscriptions.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

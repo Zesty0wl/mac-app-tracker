@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Email Settings -- Admin -- App Tracker</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 800px; margin: 2rem auto; padding: 0 1.5rem; }
+        .section { background: #fff; border-radius: 10px; padding: 1.5rem;
+                   box-shadow: 0 1px 6px rgba(0,0,0,.06); margin-bottom: 1.5rem; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: .8rem; font-weight: 600;
+                            color: #6b7280; text-transform: uppercase; letter-spacing: .04em;
+                            margin-bottom: .3rem; }
+        .form-group input, .form-group select { width: 100%; padding: .5rem .75rem;
+                    border: 1px solid #d1d5db; border-radius: 8px; font-size: .9rem;
+                    font-family: inherit; transition: border-color .15s; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #2563eb; }
+        .form-group .hint { font-size: .75rem; color: #9ca3af; margin-top: .2rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .btn { display: inline-block; padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+               font-weight: 500; text-decoration: none; cursor: pointer; border: none; transition: background .15s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .actions { display: flex; gap: .75rem; align-items: center; margin-top: 1.25rem; }
+        .status-msg { font-size: .875rem; margin-left: .5rem; }
+        .status-msg.ok { color: #059669; }
+        .status-msg.err { color: #dc2626; }
+        .provider-fields { display: none; }
+        .provider-fields.active { display: block; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px; font-size: .75rem; font-weight: 600; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-gray { background: #e5e7eb; color: #4b5563; }
+        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+        .test-section { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+                        padding: 1.25rem; margin-top: 1.5rem; }
+        .test-section h3 { font-size: .95rem; margin-bottom: .75rem; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}">Apps</a>
+            <a href="{{ url_for('admin.email_page') }}" class="active">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}">Logs</a>
+            <a href="{{ url_for('index') }}">&#8592; Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="section">
+            <h2>Site URL</h2>
+            <p style="font-size:.875rem;color:#6b7280;margin-bottom:1rem;">
+                Base URL used for links in notification emails (View Details, Unsubscribe, etc.).
+            </p>
+            <div class="form-group">
+                <label for="site_url">Site URL</label>
+                <input type="url" id="site_url" placeholder="https://yourdomain.com">
+                <div class="hint">Root URL without trailing slash or path, e.g. https://appledevicepolicy.tools</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Email Provider</h2>
+            <p style="font-size:.875rem;color:#6b7280;margin-bottom:1rem;">
+                Choose which email service to use for sending notifications.
+                Settings saved here take precedence over environment variables.
+            </p>
+
+            <div class="form-group">
+                <label for="provider">Provider</label>
+                <select id="provider">
+                    <option value="">-- Not configured --</option>
+                    <option value="m365">Microsoft 365 Graph API</option>
+                    <option value="resend">Resend</option>
+                </select>
+            </div>
+
+            <!-- M365 fields -->
+            <div id="m365-fields" class="provider-fields">
+                <hr class="divider">
+                <h2>Microsoft 365 Settings</h2>
+                <p class="form-group hint" style="margin-bottom:1rem;">
+                    Requires an Entra App Registration with <strong>Mail.Send</strong> application permission.
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="m365_client_id">Client ID</label>
+                        <input type="text" id="m365_client_id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label for="m365_tenant_id">Tenant ID</label>
+                        <input type="text" id="m365_tenant_id" placeholder="common">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="m365_client_secret">Client Secret</label>
+                    <input type="password" id="m365_client_secret" placeholder="Enter client secret">
+                    <div class="hint">Leave unchanged to keep existing secret.</div>
+                </div>
+                <div class="form-group">
+                    <label for="sender_email_m365">Sender Email</label>
+                    <input type="email" id="sender_email_m365" placeholder="noreply@yourdomain.com">
+                    <div class="hint">Must be a valid mailbox in your M365 tenant.</div>
+                </div>
+            </div>
+
+            <!-- Resend fields -->
+            <div id="resend-fields" class="provider-fields">
+                <hr class="divider">
+                <h2>Resend Settings</h2>
+                <p class="form-group hint" style="margin-bottom:1rem;">
+                    Sign up at <a href="https://resend.com" target="_blank">resend.com</a> and
+                    verify your sending domain.
+                </p>
+                <div class="form-group">
+                    <label for="resend_api_key">API Key</label>
+                    <input type="password" id="resend_api_key" placeholder="re_xxxxxxxxxx">
+                    <div class="hint">Leave unchanged to keep existing key.</div>
+                </div>
+                <div class="form-group">
+                    <label for="resend_from_email">From Email</label>
+                    <input type="email" id="resend_from_email" placeholder="notifications@yourdomain.com">
+                    <div class="hint">Must be from a verified domain in Resend.</div>
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <div class="form-group">
+                <label for="notification_recipients">Default Notification Recipients</label>
+                <input type="text" id="notification_recipients" placeholder="admin@example.com, ops@example.com">
+                <div class="hint">Comma-separated list of email addresses that receive system notifications.</div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="save-btn" onclick="saveSettings()">Save Settings</button>
+                <span id="save-status" class="status-msg"></span>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>Send Test Email</h3>
+            <p style="font-size:.85rem;color:#6b7280;margin-bottom:.75rem;">
+                Send a test email to verify the current configuration works.
+            </p>
+            <div style="display:flex;gap:.75rem;align-items:end;">
+                <div class="form-group" style="flex:1;margin-bottom:0;">
+                    <label for="test-recipient">Recipient</label>
+                    <input type="email" id="test-recipient" placeholder="you@example.com">
+                </div>
+                <button class="btn btn-secondary" id="test-btn" onclick="sendTest()">Send Test</button>
+            </div>
+            <span id="test-status" class="status-msg" style="display:inline-block;margin-top:.5rem;"></span>
+        </div>
+    </div>
+
+<script>
+const base = location.pathname.replace(/\/admin\/.*$/, '');
+
+function showProviderFields() {
+    const val = document.getElementById('provider').value;
+    document.getElementById('m365-fields').classList.toggle('active', val === 'm365');
+    document.getElementById('resend-fields').classList.toggle('active', val === 'resend');
+}
+document.getElementById('provider').addEventListener('change', showProviderFields);
+
+async function loadSettings() {
+    try {
+        const res = await fetch(base + '/admin/api/email/settings');
+        if (!res.ok) { location.href = base + '/admin/login'; return; }
+        const s = await res.json();
+
+        document.getElementById('site_url').value = s.site_url || '';
+        document.getElementById('provider').value = s.provider || '';
+        document.getElementById('m365_client_id').value = s.m365_client_id || '';
+        document.getElementById('m365_client_secret').value = s.m365_client_secret || '';
+        document.getElementById('m365_tenant_id').value = s.m365_tenant_id || 'common';
+        document.getElementById('sender_email_m365').value = s.sender_email || '';
+        document.getElementById('resend_api_key').value = s.resend_api_key || '';
+        document.getElementById('resend_from_email').value = s.resend_from_email || '';
+        document.getElementById('notification_recipients').value = s.notification_recipients || '';
+        showProviderFields();
+    } catch (e) {
+        console.error('Failed to load email settings', e);
+    }
+}
+
+async function saveSettings() {
+    const btn = document.getElementById('save-btn');
+    const status = document.getElementById('save-status');
+    btn.disabled = true;
+    status.textContent = '';
+
+    const payload = {
+        site_url: document.getElementById('site_url').value.replace(/\/+$/, ''),
+        provider: document.getElementById('provider').value,
+        m365_client_id: document.getElementById('m365_client_id').value,
+        m365_client_secret: document.getElementById('m365_client_secret').value,
+        m365_tenant_id: document.getElementById('m365_tenant_id').value,
+        sender_email: document.getElementById('sender_email_m365').value,
+        resend_api_key: document.getElementById('resend_api_key').value,
+        resend_from_email: document.getElementById('resend_from_email').value,
+        notification_recipients: document.getElementById('notification_recipients').value,
+    };
+
+    try {
+        const res = await fetch(base + '/admin/api/email/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        status.textContent = 'Settings saved.';
+        status.className = 'status-msg ok';
+    } catch (e) {
+        status.textContent = 'Error saving settings.';
+        status.className = 'status-msg err';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function sendTest() {
+    const btn = document.getElementById('test-btn');
+    const status = document.getElementById('test-status');
+    const recipient = document.getElementById('test-recipient').value.trim();
+    if (!recipient) { status.textContent = 'Enter a recipient email.'; status.className = 'status-msg err'; return; }
+
+    btn.disabled = true;
+    status.textContent = 'Sending...';
+    status.className = 'status-msg';
+
+    try {
+        const res = await fetch(base + '/admin/api/email/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipient }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            status.textContent = 'Test email sent.';
+            status.className = 'status-msg ok';
+        } else {
+            status.textContent = data.error || 'Send failed.';
+            status.className = 'status-msg err';
+        }
+    } catch (e) {
+        status.textContent = 'Error sending test email.';
+        status.className = 'status-msg err';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+loadSettings();
+</script>
+</body>
+</html>

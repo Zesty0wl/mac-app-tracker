@@ -1,0 +1,66 @@
+{#
+    Site footer.
+
+    Driven by branding context (see inject_branding() in web_app.py):
+      - site_name              : shown in copyright
+      - footer_logo_url        : optional; hidden when empty
+      - footer_logo_alt        : alt text for the logo
+      - footer_attribution     : optional; hidden when empty (e.g. "Created by ...")
+      - footer_tagline_html    : optional line under the logo row (HTML-safe)
+      - footer_disclaimer_title: title of the disclaimer card
+      - footer_disclaimer_html : HTML body of the disclaimer card
+      - footer_links           : list of {label, href, target?}
+
+    To fully replace the markup, drop a file at
+    ${TEMPLATE_OVERRIDE_DIR}/_footer.html.
+#}
+<footer class="site-footer">
+    <div class="site-footer__inner">
+        {% if footer_logo_url or footer_attribution %}
+        <div class="site-footer__logo-row">
+            {% if footer_logo_url %}
+            <img src="{{ footer_logo_url }}" alt="{{ footer_logo_alt or site_name }}" class="site-footer__logo">
+            {% endif %}
+            {% if footer_attribution %}
+            <p>{{ footer_attribution }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if footer_tagline_html %}
+        <div class="site-footer__attribution">
+            {{ footer_tagline_html|safe }}
+        </div>
+        {% endif %}
+
+        {% if footer_disclaimer_html %}
+        <div class="site-footer__disclaimer">
+            <div class="site-footer__disclaimer-card">
+                {% if footer_disclaimer_title %}
+                <p class="site-footer__disclaimer-card-title">{{ footer_disclaimer_title }}</p>
+                {% endif %}
+                {{ footer_disclaimer_html|safe }}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if footer_links %}
+        <div class="site-footer__links">
+            {% for link in footer_links %}
+            <a href="{{ link.href }}"{% if link.target %} target="{{ link.target }}" rel="noopener"{% endif %}>{{ link.label }}</a>
+            {% endfor %}
+            {% if source_url %}
+            <a href="{{ source_url }}" target="_blank" rel="noopener">Source on GitHub</a>
+            {% endif %}
+        </div>
+        {% elif source_url %}
+        <div class="site-footer__links">
+            <a href="{{ source_url }}" target="_blank" rel="noopener">Source on GitHub</a>
+        </div>
+        {% endif %}
+
+        <div class="site-footer__copyright">
+            &copy; {{ now().year if now is defined else '2026' }} {{ site_name }}
+        </div>
+    </div>
+</footer>

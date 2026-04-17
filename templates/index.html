@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }}</title>
+    {% if dev_mode %}
+    <meta name="robots" content="noindex, nofollow">
+    {% endif %}
+    {% if plausible_domain and plausible_script_url %}
+    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% endif %}
+    
+    <!-- Cal-Heatmap dependencies -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/dayjs@1/dayjs.min.js"></script>
+    <script src="https://unpkg.com/dayjs@1/plugin/localeData.js"></script>
+    <script>dayjs.extend(window.dayjs_plugin_localeData);</script>
+    <script src="https://unpkg.com/cal-heatmap/dist/cal-heatmap.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/cal-heatmap/dist/cal-heatmap.css">
+    <script src="https://unpkg.com/cal-heatmap/dist/plugins/Tooltip.min.js"></script>
+    <script src="https://unpkg.com/cal-heatmap/dist/plugins/CalendarLabel.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --bg-main: #f9fafb;
+            --bg-secondary: #f3f4f6;
+            --bg-card: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --shadow: rgba(0, 0, 0, 0.05);
+            --nav-bg: #ffffff;
+            --nav-border: #e5e7eb;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.47;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        nav {
+            background: var(--nav-bg);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid var(--nav-border);
+        }
+
+        .nav-content {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .nav-brand {
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-decoration: none;
+            letter-spacing: -0.01em;
+            transition: opacity 0.2s;
+        }
+
+        .nav-brand:hover {
+            opacity: 0.8;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+            background: var(--bg-secondary);
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        header {
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            margin-top: 0.75rem;
+            font-size: 1.125rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .api-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 980px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .api-link:hover {
+            background: var(--primary-hover);
+            transform: scale(1.02);
+        }
+
+        .api-link svg {
+            flex-shrink: 0;
+        }
+
+        .last-check-badge {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            padding: 0.375rem 1rem;
+            border-radius: 980px;
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .last-check-badge #last-check {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .app-selector {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+        }
+
+        .app-selector h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .app-dropdown {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .app-dropdown select {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            transition: all 0.2s;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=UTF-8,<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="%233b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            padding-right: 3rem;
+        }
+
+        .app-dropdown select:hover {
+            border-color: var(--primary);
+            background-color: #f8fafc;
+        }
+
+        .app-dropdown select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .notification-link {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.75rem;
+            background: var(--border);
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 1rem;
+            font-weight: 400;
+            font-size: 0.75rem;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border);
+        }
+
+        .notification-link:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--primary);
+        }
+
+        .heatmap-section {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 2rem;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .heatmap-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .heatmap-section h2 {
+            margin-bottom: 0;
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .heatmap-wrapper {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .heatmap-card {
+            background: var(--bg-main);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid var(--border);
+            flex: 1;
+        }
+
+        .heatmap-year-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .year-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .year-btn:hover {
+            border-color: var(--primary);
+            color: var(--text-primary);
+        }
+
+        .year-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .heatmap-card {
+            background: var(--bg-main);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid var(--border);
+        }
+
+        #cal-heatmap {
+            overflow: visible;
+        }
+
+        /* Adjust cal-heatmap internal spacing */
+        #cal-heatmap svg {
+            display: block;
+        }
+
+        .versions-section {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 2rem;
+            border: 1px solid var(--border);
+            display: none;
+        }
+
+        .versions-section.active {
+            display: block;
+        }
+
+        #versions-section h2 {
+            margin-bottom: 2rem;
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .fwlink-badge {
+            display: inline-block;
+            background: rgba(0, 0, 0, 0.04);
+            padding: 0.375rem 1rem;
+            border-radius: 980px;
+            font-size: 0.8125rem;
+            font-weight: 400;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+        }
+
+        .fwlink-badge a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .fwlink-badge a:hover {
+            text-decoration: underline;
+        }
+
+        .back-to-apps {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 400;
+            font-size: 0.85em;
+        }
+
+        .back-to-apps:hover {
+            text-decoration: underline;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 1rem;
+        }
+
+        thead {
+            background: var(--bg-secondary);
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem;
+            font-weight: 600;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        td {
+            padding: 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+            background: var(--bg-card);
+        }
+
+        tbody tr {
+            transition: background-color 0.15s ease;
+        }
+
+        tbody tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        .version-cell {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1.0625rem;
+            letter-spacing: -0.01em;
+        }
+
+        .date-cell {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+        }
+
+        .date-cell .date-short {
+            display: none;
+        }
+
+        .date-cell .date-full {
+            display: inline;
+        }
+
+        .copyable-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            max-width: 100%;
+        }
+
+        .link-cell {
+            max-width: 300px;
+        }
+
+        .truncated-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.9375rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .truncated-link:hover {
+            text-decoration: underline;
+        }
+
+        .checksum-cell {
+            max-width: 150px;
+        }
+
+        .truncated-hash {
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .copy-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.25rem;
+            color: var(--text-secondary);
+            opacity: 0;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .copyable-cell:hover .copy-btn {
+            opacity: 1;
+        }
+
+        .copy-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--primary);
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
+
+        .copy-btn.copied {
+            color: #10b981;
+        }
+
+        .size-cell {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .components-cell {
+            font-size: 0.9375rem;
+            white-space: nowrap;
+        }
+
+        .components-cell.expandable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .components-cell.expandable:hover {
+            background: var(--bg-secondary);
+        }
+
+        .component-item {
+            padding: 0.25rem 0;
+            color: var(--text-secondary);
+        }
+
+        .component-count {
+            display: inline-block;
+            background: var(--primary);
+            color: white;
+            padding: 0.125rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .error {
+            background: #fef0f0;
+            color: #d13438;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+
+        .checksum {
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+
+        .url-cell {
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .url-cell a {
+            display: inline-block;
+            max-width: calc(100% - 30px);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+        }
+
+        .checksum-cell {
+            white-space: nowrap;
+        }
+
+        .components-cell.expandable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .components-cell.expandable:hover {
+            background: var(--bg-main);
+        }
+
+        .component-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary);
+            color: white;
+            padding: 0.25rem 0.625rem;
+            border-radius: 12px;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            min-width: 28px;
+            height: 24px;
+        }
+
+        .expand-icon {
+            display: inline-block;
+            margin-left: 0.5rem;
+            font-size: 0.625rem;
+            transition: transform 0.2s;
+            color: var(--text-secondary);
+        }
+
+        .version-row.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        .components-detail-row {
+            background: var(--bg-main);
+        }
+
+        .components-detail-cell {
+            padding: 0 !important;
+        }
+
+        .components-list {
+            padding: 1rem 2rem;
+        }
+
+        .component-item {
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: white;
+            border-left: 3px solid var(--primary);
+            border-radius: 4px;
+        }
+
+        .component-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .component-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+            color: #374151;
+        }
+
+        .component-version {
+            font-weight: 500;
+            color: var(--primary);
+        }
+
+        .component-bundle {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #374151;
+        }
+
+        .component-path {
+            font-size: 0.8rem;
+            font-family: 'Courier New', monospace;
+            color: #374151;
+        }
+
+        @media (max-width: 768px) {
+            .nav-content {
+                padding: 0 1rem;
+            }
+
+            .nav-links {
+                gap: 1rem;
+            }
+
+            .nav-links a {
+                font-size: 0.8125rem;
+            }
+
+            .container {
+                padding: 2rem 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .app-buttons {
+                flex-direction: column;
+            }
+
+            .app-button {
+                width: 100%;
+                text-align: center;
+            }
+
+            table {
+                font-size: 0.875rem;
+            }
+
+            td, th {
+                padding: 0.5rem;
+            }
+
+            /* Hide heatmap section on mobile */
+            .heatmap-section {
+                display: none !important;
+            }
+
+            /* Hide specific table columns on mobile in individual app view */
+            /* Keep: Version (1), First Detected (2), Size (3) */
+            /* Hide: Components (4), Download URL (5), SHA256 (6) */
+            .versions-section th:nth-child(4),
+            .versions-section td:nth-child(4),
+            .versions-section th:nth-child(5),
+            .versions-section td:nth-child(5),
+            .versions-section th:nth-child(6),
+            .versions-section td:nth-child(6) {
+                display: none;
+            }
+
+            /* Hide components detail row on mobile */
+            .versions-section .components-detail-row {
+                display: none !important;
+            }
+
+            /* Hide specific columns in all apps table */
+            /* Keep: Application (2), Version (3), First Detected (1), Size (4) */
+            /* Hide: Download URL (5), SHA256 (6) */
+            .all-apps-table th:nth-child(5),
+            .all-apps-table td:nth-child(5),
+            .all-apps-table th:nth-child(6),
+            .all-apps-table td:nth-child(6) {
+                display: none;
+            }
+
+            /* Show only date on mobile, hide full datetime */
+            .date-cell .date-full {
+                display: none;
+            }
+            
+            .date-cell .date-short {
+                display: inline;
+            }
+        }
+
+        /* Dev Banner Styles */
+        .dev-banner {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .dev-banner svg {
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        </style>
+</head>
+<body>
+    {% include '_header.html' %}
+
+    {% if dev_mode %}
+    <div class="dev-banner">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        DEVELOPMENT VERSION - Changes here will not affect production data
+    </div>
+    {% endif %}
+
+    <div class="container">
+        <header>
+            <h1>{{ site_name }}</h1>
+            <div class="subtitle">
+                Real-time monitoring of macOS application updates
+                <span class="last-check-badge">Last check: <span id="last-check">-</span></span>
+            </div>
+        </header>
+
+        <div class="app-selector">
+            <h2>Select Application</h2>
+            <div class="app-dropdown">
+                <select id="app-dropdown">
+                    <option value="">Loading applications...</option>
+                </select>
+            </div>
+            <div style="margin-top: 1rem;">
+                <a href="{{ url_for('subscribe_page') }}" class="notification-link">Notifications</a>
+            </div>
+        </div>
+
+        <div class="heatmap-section" id="heatmap-section" style="display: none;">
+            <div class="heatmap-header">
+                <h2 id="heatmap-app-name">Update Activity</h2>
+            </div>
+            <div class="heatmap-wrapper">
+                <div class="heatmap-card">
+                    <div id="cal-heatmap"></div>
+                </div>
+                <div class="heatmap-year-selector" id="heatmap-years"></div>
+            </div>
+        </div>
+
+        <div class="versions-section active" id="versions-section">
+            <h2 id="selected-app-name">All Applications</h2>
+            <div id="versions-content">
+                <div class="loading">Loading versions...</div>
+            </div>
+        </div>
+    </div>
+
+    {% include '_footer.html' %}
+
+    <script>
+        let currentApp = null;
+        
+        // Get the base path from the current URL
+        const basePath = window.location.pathname.endsWith('/') 
+            ? window.location.pathname 
+            : window.location.pathname + '/';
+
+        // Format file size intelligently
+        function formatSize(mb) {
+            if (mb >= 1024) {
+                return (mb / 1024).toFixed(2) + ' GB';
+            } else if (mb >= 1) {
+                return mb.toFixed(2) + ' MB';
+            } else {
+                return (mb * 1024).toFixed(0) + ' KB';
+            }
+        }
+
+        // Format file size from bytes
+        function formatFileSize(bytes) {
+            if (bytes >= 1024 * 1024 * 1024) {
+                return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+            } else if (bytes >= 1024 * 1024) {
+                return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            } else if (bytes >= 1024) {
+                return (bytes / 1024).toFixed(2) + ' KB';
+            } else {
+                return bytes + ' bytes';
+            }
+        }
+
+        // Load stats (just last check time)
+        async function loadStats() {
+            try {
+                const response = await fetch(`${basePath}api/stats`);
+                const stats = await response.json();
+                
+                if (stats.last_check) {
+                    const date = new Date(stats.last_check);
+                    document.getElementById('last-check').textContent = date.toLocaleString();
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                document.getElementById('last-check').textContent = 'Unknown';
+            }
+        }
+
+        // Load apps list
+        async function loadApps() {
+            try {
+                const response = await fetch(`${basePath}api/apps`);
+                const apps = await response.json();
+                
+                const dropdown = document.getElementById('app-dropdown');
+                dropdown.innerHTML = '<option value="all">All Applications</option>';
+                
+                apps.forEach(app => {
+                    const option = document.createElement('option');
+                    option.value = app.id;
+                    option.textContent = app.name;
+                    option.dataset.downloadUrl = app.download_url;
+                    dropdown.appendChild(option);
+                });
+                
+                // Add change event listener
+                dropdown.addEventListener('change', (e) => {
+                    const selectedOption = e.target.options[e.target.selectedIndex];
+                    if (e.target.value === 'all') {
+                        // Update URL and show all versions
+                        window.history.pushState({}, '', window.location.pathname);
+                        showAllVersions();
+                    } else if (e.target.value) {
+                        // Update URL with app parameter
+                        const newUrl = `${window.location.pathname}?app=${encodeURIComponent(e.target.value)}`;
+                        window.history.pushState({}, '', newUrl);
+                        
+                        const appName = selectedOption.textContent;
+                        const downloadUrl = selectedOption.dataset.downloadUrl;
+                        selectApp(e.target.value, appName, downloadUrl);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading apps:', error);
+                const dropdown = document.getElementById('app-dropdown');
+                dropdown.innerHTML = '<option value="">Failed to load applications</option>';
+            }
+        }
+
+        // Show all versions across all apps
+        let allAppsSortColumn = 'first_detected';
+        let allAppsSortDirection = 'desc';
+        
+        function sortAllAppsVersions(versions) {
+            versions.sort((a, b) => {
+                let aVal = a[allAppsSortColumn];
+                let bVal = b[allAppsSortColumn];
+                
+                // Handle date sorting
+                if (allAppsSortColumn === 'first_detected') {
+                    aVal = new Date(aVal);
+                    bVal = new Date(bVal);
+                }
+                
+                // Handle numeric sorting for size
+                if (allAppsSortColumn === 'size_bytes') {
+                    aVal = parseInt(aVal) || 0;
+                    bVal = parseInt(bVal) || 0;
+                }
+                
+                // Handle string sorting (case-insensitive)
+                if (typeof aVal === 'string') {
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+                
+                let comparison = 0;
+                if (aVal > bVal) comparison = 1;
+                if (aVal < bVal) comparison = -1;
+                
+                return allAppsSortDirection === 'asc' ? comparison : -comparison;
+            });
+        }
+        
+        async function showAllVersions() {
+            currentApp = null;
+            
+            const titleElement = document.getElementById('selected-app-name');
+            titleElement.textContent = 'All Applications';
+            
+            // Hide heatmap when showing all apps
+            const heatmapSection = document.getElementById('heatmap-section');
+            heatmapSection.style.display = 'none';
+            
+            const section = document.getElementById('versions-section');
+            section.classList.add('active');
+            
+            const content = document.getElementById('versions-content');
+            content.innerHTML = '<div class="loading">Loading all versions...</div>';
+            
+            try {
+                const response = await fetch(`${basePath}api/all-versions`);
+                let versions = await response.json();
+                
+                if (versions.length === 0) {
+                    content.innerHTML = '<p>No versions found.</p>';
+                    return;
+                }
+                
+                // Group by package_identifier and keep only the latest version per app
+                const latestByApp = {};
+                versions.forEach(version => {
+                    const identifier = version.package_identifier;
+                    if (!latestByApp[identifier] || 
+                        new Date(version.first_detected) > new Date(latestByApp[identifier].first_detected)) {
+                        latestByApp[identifier] = version;
+                    }
+                });
+                
+                // Convert back to array
+                versions = Object.values(latestByApp);
+                
+                // Sort versions
+                sortAllAppsVersions(versions);
+                
+                // Render table with improved layout
+                const table = document.createElement('table');
+                table.className = 'all-apps-table';
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                
+                // Create sortable column headers
+                const columns = [
+                    { id: 'first_detected', label: 'First Detected' },
+                    { id: 'app_name', label: 'Application' },
+                    { id: 'version', label: 'Version' },
+                    { id: 'size_bytes', label: 'Size' },
+                    { id: 'download_url', label: 'Download URL' },
+                    { id: 'checksum', label: 'SHA256' }
+                ];
+                
+                columns.forEach(col => {
+                    const th = document.createElement('th');
+                    th.textContent = col.label;
+                    th.style.cursor = 'pointer';
+                    th.style.userSelect = 'none';
+                    th.addEventListener('click', () => {
+                        if (allAppsSortColumn === col.id) {
+                            allAppsSortDirection = allAppsSortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            allAppsSortColumn = col.id;
+                            allAppsSortDirection = 'asc';
+                        }
+                        showAllVersions();
+                    });
+                    headerRow.appendChild(th);
+                });
+                
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                const tbody = document.createElement('tbody');
+                table.appendChild(tbody);
+                versions.forEach(version => {
+                    const row = document.createElement('tr');
+                    
+                    const date = new Date(version.first_detected);
+                    const formattedDate = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                    
+                    const sizeFormatted = formatFileSize(version.size_bytes);
+                    
+                    // Check if this is Intune Agent (hide download link)
+                    const isIntuneAgent = version.package_identifier === 'com.microsoft.intuneMDMAgent';
+                    
+                    // Determine if URL is removed
+                    const isRemoved = version.actual_url === '[download removed]';
+                    const fullUrl = version.actual_url || version.download_url;
+                    const truncatedUrl = truncateUrl(fullUrl);
+                    const truncatedChecksum = version.checksum.substring(0, 16) + '...';
+                    
+                    // Create cells
+                    const dateCell = document.createElement('td');
+                    dateCell.textContent = formattedDate;
+                    
+                    // App name cell (clickable link)
+                    const appCell = document.createElement('td');
+                    const appLink = document.createElement('a');
+                    appLink.href = `?app=${encodeURIComponent(version.package_identifier)}`;
+                    appLink.style.fontWeight = 'bold';
+                    appLink.style.color = 'var(--primary)';
+                    appLink.style.textDecoration = 'none';
+                    appLink.textContent = version.app_name;
+                    appCell.appendChild(appLink);
+                    
+                    const versionCell = document.createElement('td');
+                    const versionBadge = document.createElement('span');
+                    versionBadge.className = 'version-badge';
+                    versionBadge.textContent = version.version;
+                    versionCell.appendChild(versionBadge);
+                    
+                    const sizeCell = document.createElement('td');
+                    sizeCell.textContent = sizeFormatted;
+                    
+                    // URL cell with copy button
+                    const urlCell = document.createElement('td');
+                    urlCell.className = 'url-cell';
+                    if (isIntuneAgent) {
+                        const dashSpan = document.createElement('span');
+                        dashSpan.style.color = '#6b7280';
+                        dashSpan.textContent = '—';
+                        urlCell.appendChild(dashSpan);
+                    } else if (isRemoved) {
+                        const removedSpan = document.createElement('span');
+                        removedSpan.style.color = '#dc2626';
+                        removedSpan.style.fontStyle = 'italic';
+                        removedSpan.textContent = '[download removed]';
+                        urlCell.appendChild(removedSpan);
+                    } else {
+                        const copyableDiv = document.createElement('div');
+                        copyableDiv.className = 'copyable-cell';
+                        
+                        const urlLink = document.createElement('a');
+                        urlLink.href = fullUrl;
+                        urlLink.target = '_blank';
+                        urlLink.rel = 'noopener';
+                        urlLink.className = 'truncated-link';
+                        urlLink.title = fullUrl;
+                        urlLink.textContent = truncatedUrl;
+                        copyableDiv.appendChild(urlLink);
+                        
+                        const urlCopyBtn = document.createElement('button');
+                        urlCopyBtn.className = 'copy-btn';
+                        urlCopyBtn.title = 'Copy to clipboard';
+                        urlCopyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>`;
+                        urlCopyBtn.addEventListener('click', () => copyToClipboard(fullUrl, urlCopyBtn));
+                        copyableDiv.appendChild(urlCopyBtn);
+                        
+                        urlCell.appendChild(copyableDiv);
+                    }
+                    
+                    // Checksum cell with copy button (hide for Intune Agent)
+                    const checksumCell = document.createElement('td');
+                    checksumCell.className = 'checksum-cell';
+                    
+                    if (isIntuneAgent) {
+                        const dashSpan = document.createElement('span');
+                        dashSpan.style.color = '#6b7280';
+                        dashSpan.textContent = '—';
+                        checksumCell.appendChild(dashSpan);
+                    } else {
+                        const copyableDiv = document.createElement('div');
+                        copyableDiv.className = 'copyable-cell';
+                        
+                        const checksumSpan = document.createElement('span');
+                        checksumSpan.className = 'truncated-hash';
+                        checksumSpan.title = version.checksum;
+                        checksumSpan.textContent = truncatedChecksum;
+                        copyableDiv.appendChild(checksumSpan);
+                        
+                        const checksumCopyBtn = document.createElement('button');
+                        checksumCopyBtn.className = 'copy-btn';
+                        checksumCopyBtn.title = 'Copy to clipboard';
+                        checksumCopyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>`;
+                        checksumCopyBtn.addEventListener('click', () => copyToClipboard(version.checksum, checksumCopyBtn));
+                        copyableDiv.appendChild(checksumCopyBtn);
+                        
+                        checksumCell.appendChild(copyableDiv);
+                    }
+                    
+                    row.appendChild(dateCell);
+                    row.appendChild(appCell);
+                    row.appendChild(versionCell);
+                    row.appendChild(sizeCell);
+                    row.appendChild(urlCell);
+                    row.appendChild(checksumCell);
+                    
+                    tbody.appendChild(row);
+                });
+                
+                content.innerHTML = '';
+                content.appendChild(table);
+            } catch (error) {
+                console.error('Error loading all versions:', error);
+                content.innerHTML = '<div class="error">Failed to load versions</div>';
+            }
+        }
+
+        // Cal-heatmap instance and current year
+        let cal = null;
+        let currentYear = new Date().getFullYear();
+        let availableYears = [];
+
+        // Load and render heatmap for a specific app
+        async function loadHeatmap(appId, appName) {
+            const heatmapSection = document.getElementById('heatmap-section');
+            const heatmapContainer = document.getElementById('cal-heatmap');
+            
+            try {
+                const response = await fetch(`${basePath}api/app/${encodeURIComponent(appId)}/heatmap`);
+                const data = await response.json();
+                
+                // Extract unique years from the data
+                const years = [...new Set(data.map(item => new Date(item.date).getFullYear()))].sort((a, b) => b - a);
+                availableYears = years;
+                
+                // Set current year to the most recent year in data or current calendar year
+                const today = new Date();
+                currentYear = years.includes(today.getFullYear()) ? today.getFullYear() : years[0];
+                
+                // Create year selector buttons
+                createYearButtons(years);
+                
+                // Render heatmap for current year
+                renderHeatmapForYear(data, currentYear);
+                
+                // Show heatmap section
+                heatmapSection.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading heatmap:', error);
+                heatmapSection.style.display = 'none';
+            }
+        }
+
+        // Create year selector buttons
+        function createYearButtons(years) {
+            const yearsContainer = document.getElementById('heatmap-years');
+            yearsContainer.innerHTML = '';
+            
+            years.forEach(year => {
+                const btn = document.createElement('button');
+                btn.className = 'year-btn' + (year === currentYear ? ' active' : '');
+                btn.textContent = year;
+                btn.onclick = () => switchToYear(year);
+                yearsContainer.appendChild(btn);
+            });
+        }
+
+        // Switch to a different year
+        function switchToYear(year) {
+            currentYear = year;
+            
+            // Update button states
+            document.querySelectorAll('.year-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.textContent) === year);
+            });
+            
+            // Fetch and re-render heatmap data for the selected year
+            const appId = currentApp;
+            fetch(`${basePath}api/app/${encodeURIComponent(appId)}/heatmap`)
+                .then(response => response.json())
+                .then(data => renderHeatmapForYear(data, year))
+                .catch(error => console.error('Error switching year:', error));
+        }
+
+        // Render heatmap for a specific year
+        function renderHeatmapForYear(data, year) {
+                
+                // Filter data for the selected year
+                const yearData = data.filter(item => new Date(item.date).getFullYear() === year);
+                
+                // Data is already in the correct format: array of {date, value}
+                const heatmapData = yearData.map(item => ({
+                    date: item.date,
+                    value: item.value
+                }));
+                
+                // Destroy previous instance if exists
+                if (cal) {
+                    cal.destroy();
+                }
+                
+                // Set date range for the entire selected year
+                const startDate = new Date(year, 0, 1); // January 1st of selected year
+                
+                // Initialize cal-heatmap with GitHub-style configuration
+                cal = new CalHeatmap();
+                cal.paint({
+                    data: {
+                        source: heatmapData,
+                        x: 'date',
+                        y: 'value'
+                    },
+                    date: { start: startDate },
+                    range: 12,
+                    scale: {
+                        color: {
+                            type: 'threshold',
+                            range: ['#ebedf0', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
+                            domain: [1, 2, 3, 5]
+                        }
+                    },
+                    domain: {
+                        type: 'month',
+                        gutter: 10,
+                        label: { text: 'MMM', textAlign: 'start', position: 'top' }
+                    },
+                    subDomain: { 
+                        type: 'ghDay', 
+                        radius: 2, 
+                        width: 13, 
+                        height: 13, 
+                        gutter: 4 
+                    },
+                    itemSelector: '#cal-heatmap',
+                    options: {
+                        locale: {
+                            weekStart: 1
+                        }
+                    }
+                }, [
+                    [
+                        Tooltip,
+                        {
+                            text: function (date, value, dayjsDate) {
+                                const count = value || 0;
+                                const plural = count === 1 ? 'update' : 'updates';
+                                return `${count} ${plural} on ${dayjsDate.format('MMM D, YYYY')}`;
+                            }
+                        }
+                    ],
+                    [
+                        CalendarLabel,
+                        {
+                            width: 30,
+                            textAlign: 'start',
+                            text: () => dayjs.weekdaysShort().map((d, i) => (i % 2 == 0 ? '' : d)),
+                            padding: [25, 0, 0, 0]
+                        }
+                    ]
+                ]);
+        }
+
+        // Select an app and load its versions
+        async function selectApp(appId, appName, downloadUrl) {
+            currentApp = appId;
+            
+            // Update section title with back link and fwlink (hide for Intune Agent)
+            const titleElement = document.getElementById('selected-app-name');
+            const isIntuneAgent = appId === 'com.microsoft.intuneMDMAgent';
+            const backLink = `<a href="#" class="back-to-apps" onclick="event.preventDefault(); document.getElementById('app-dropdown').value='all'; showAllVersions(); window.history.pushState({}, '', window.location.pathname);">All Applications</a> / `;
+            
+            if (downloadUrl && !isIntuneAgent) {
+                titleElement.innerHTML = `${backLink}${escapeHtml(appName)} <span class="fwlink-badge"><a href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">${truncateUrl(downloadUrl)}</a></span>`;
+            } else {
+                titleElement.innerHTML = `${backLink}${escapeHtml(appName)}`;
+            }
+            
+            // Show section and load versions
+            const section = document.getElementById('versions-section');
+            section.classList.add('active');
+            
+            const content = document.getElementById('versions-content');
+            content.innerHTML = '<div class="loading">Loading versions...</div>';
+            
+            // Load heatmap for the selected app
+            loadHeatmap(appId, appName);
+            
+            try {
+                const response = await fetch(`${basePath}api/app/${encodeURIComponent(appId)}/versions`);
+                const versions = await response.json();
+                
+                if (versions.length === 0) {
+                    content.innerHTML = '<p>No versions found for this application.</p>';
+                    return;
+                }
+                
+                renderVersionsTable(versions, content);
+            } catch (error) {
+                console.error('Error loading versions:', error);
+                content.innerHTML = '<div class="error">Failed to load versions</div>';
+            }
+        }
+
+        // Render versions table
+        function renderVersionsTable(versions, container) {
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>First Detected</th>
+                        <th>Size</th>
+                        <th>Components</th>
+                        <th>Download URL</th>
+                        <th>SHA256</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            
+            const tbody = table.querySelector('tbody');
+            
+            versions.forEach(version => {
+                const row = document.createElement('tr');
+                row.className = 'version-row';
+                
+                const date = new Date(version.first_detected);
+                const formattedDateOnly = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+                const formattedTime = date.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                const formattedDate = date.toLocaleString();
+                
+                // Count total components (including main app if present)
+                const mainAppCount = (version.app_path || version.bundle_id) ? 1 : 0;
+                const totalComponentCount = mainAppCount + version.components.length;
+                const hasComponents = totalComponentCount > 0;
+                
+                const componentsHtml = hasComponents
+                    ? `<span class="component-badge">${totalComponentCount}</span> <span class="expand-icon">▶</span>`
+                    : 'None';
+                
+                const fullUrl = version.actual_url || version.download_url;
+                const isRemoved = fullUrl === '[download removed]';
+                const truncatedUrl = isRemoved ? fullUrl : (fullUrl.length > 40 ? fullUrl.substring(0, 40) + '...' : fullUrl);
+                const truncatedChecksum = version.checksum.substring(0, 12) + '...';
+                
+                // Check if this is Intune Agent (hide download link)
+                const isIntuneAgent = version.package_identifier === 'com.microsoft.intuneMDMAgent';
+                
+                // Build URL cell content based on whether it's removed or Intune Agent
+                let urlCellContent;
+                if (isIntuneAgent) {
+                    urlCellContent = `<span style="color: #6b7280;">—</span>`;
+                } else if (isRemoved) {
+                    urlCellContent = `<span style="color: #dc2626; font-style: italic;">[download removed]</span>`;
+                } else {
+                    urlCellContent = `
+                        <div class="copyable-cell">
+                            <a href="${escapeHtml(fullUrl)}" target="_blank" rel="noopener" class="truncated-link" title="${escapeHtml(fullUrl)}">
+                                ${escapeHtml(truncatedUrl)}
+                            </a>
+                            <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(fullUrl).replace(/'/g, "\\'")}', this)" title="Copy to clipboard">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                // Build checksum cell content (hide for Intune Agent)
+                let checksumCellContent;
+                if (isIntuneAgent) {
+                    checksumCellContent = `<span style="color: #6b7280;">—</span>`;
+                } else {
+                    checksumCellContent = `
+                        <div class="copyable-cell">
+                            <span class="truncated-hash" title="${escapeHtml(version.checksum)}">${escapeHtml(truncatedChecksum)}</span>
+                            <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(version.checksum)}', this)" title="Copy to clipboard">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                row.innerHTML = `
+                    <td class="version-cell">${escapeHtml(version.version)}</td>
+                    <td class="date-cell">
+                        <span class="date-full">${formattedDate}</span>
+                        <span class="date-short">${formattedDateOnly}</span>
+                    </td>
+                    <td class="size-cell">${formatSize(version.size_mb)}</td>
+                    <td class="components-cell ${hasComponents ? 'expandable' : ''}">${componentsHtml}</td>
+                    <td class="link-cell">
+                        ${urlCellContent}
+                    </td>
+                    <td class="checksum-cell">
+                        ${checksumCellContent}
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+                
+                // Add components row (initially hidden)
+                if (hasComponents) {
+                    const componentsRow = document.createElement('tr');
+                    componentsRow.className = 'components-detail-row';
+                    componentsRow.style.display = 'none';
+                    
+                    // Build main app component first
+                    let allComponents = [];
+                    
+                    // Add main app if available
+                    if (version.app_path || version.bundle_id) {
+                        const mainAppName = version.app_path 
+                            ? version.app_path.split('/').pop().replace('.app', '')
+                            : 'Main Application';
+                        
+                        allComponents.push(`
+                            <div class="component-item" style="border-left: 3px solid #3b82f6;">
+                                <div class="component-name">${escapeHtml(mainAppName)} <span style="font-size: 0.8em; color: #6b7280;">(Main App)</span></div>
+                                <div class="component-details">
+                                    <span class="component-version">v${escapeHtml(version.version)}</span>
+                                    ${version.bundle_id ? `<span class="component-bundle">${escapeHtml(version.bundle_id)}</span>` : ''}
+                                    ${version.app_path ? `<span class="component-path">${escapeHtml(version.app_path)}</span>` : ''}
+                                </div>
+                            </div>
+                        `);
+                    }
+                    
+                    // Add sub-components
+                    const subComponentsHtml = version.components.map(comp => `
+                        <div class="component-item">
+                            <div class="component-name">${escapeHtml(comp.name)}</div>
+                            <div class="component-details">
+                                <span class="component-version">v${escapeHtml(comp.version)}</span>
+                                ${comp.bundle_id ? `<span class="component-bundle">${escapeHtml(comp.bundle_id)}</span>` : ''}
+                                <span class="component-path">${escapeHtml(comp.app_path)}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    allComponents.push(subComponentsHtml);
+                    
+                    componentsRow.innerHTML = `
+                        <td colspan="6" class="components-detail-cell">
+                            <div class="components-list">
+                                ${allComponents.join('')}
+                            </div>
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(componentsRow);
+                    
+                    // Add click handler to toggle
+                    const componentsCell = row.querySelector('.components-cell.expandable');
+                    componentsCell.style.cursor = 'pointer';
+                    componentsCell.addEventListener('click', () => {
+                        const isExpanded = componentsRow.style.display !== 'none';
+                        componentsRow.style.display = isExpanded ? 'none' : 'table-row';
+                        row.classList.toggle('expanded', !isExpanded);
+                        
+                        const icon = componentsCell.querySelector('.expand-icon');
+                        icon.textContent = isExpanded ? '▶' : '▼';
+                    });
+                }
+            });
+            
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+
+        // Helper functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function truncateUrl(url) {
+            if (url.length > 60) {
+                return url.substring(0, 57) + '...';
+            }
+            return url;
+        }
+
+        // Copy to clipboard function
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Visual feedback
+                button.classList.add('copied');
+                const originalHTML = button.innerHTML;
+                button.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                
+                setTimeout(() => {
+                    button.classList.remove('copied');
+                    button.innerHTML = originalHTML;
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadStats();
+            await loadApps();
+            
+            // Check for app parameter in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const appParam = urlParams.get('app');
+            
+            if (appParam) {
+                // Pre-select the app from the dropdown
+                const dropdown = document.getElementById('app-dropdown');
+                
+                // First try exact match with package identifier
+                let option = Array.from(dropdown.options).find(opt => opt.value === appParam);
+                
+                // If not found, try to match against short ID (e.g., 'copilot' -> 'com.microsoft.m365copilot')
+                if (!option) {
+                    // Map short IDs to package identifiers
+                    const shortIdMap = {
+                        'copilot': 'com.microsoft.m365copilot',
+                        'companyportal': 'com.microsoft.CompanyPortalMac',
+                        'edge': 'com.microsoft.edgemac',
+                        'defender': 'com.microsoft.wdav',
+                        'office': 'com.microsoft.office.suite',
+                        'windowsapp': 'com.microsoft.rdc.macos',
+                        'intune': 'com.microsoft.intuneMDMAgent',
+                        'vscode': 'com.microsoft.VSCode',
+                        'word': 'com.microsoft.Word',
+                        'excel': 'com.microsoft.Excel',
+                        'powerpoint': 'com.microsoft.Powerpoint',
+                        'onenote': 'com.microsoft.onenote.mac',
+                        'outlook': 'com.microsoft.Outlook',
+                        'onedrive': 'com.microsoft.OneDrive',
+                        'teams': 'com.microsoft.teams2'
+                    };
+                    
+                    const fullId = shortIdMap[appParam.toLowerCase()];
+                    if (fullId) {
+                        option = Array.from(dropdown.options).find(opt => opt.value === fullId);
+                    }
+                }
+                
+                if (option) {
+                    dropdown.value = option.value;
+                    const appName = option.textContent;
+                    const downloadUrl = option.dataset.downloadUrl;
+                    selectApp(option.value, appName, downloadUrl);
+                } else {
+                    // App not found, show all
+                    showAllVersions();
+                }
+            } else {
+                // No app parameter, show all versions
+                showAllVersions();
+            }
+            
+            // Refresh stats every minute
+            setInterval(loadStats, 60000);
+        });
+    </script>
+</body>
+</html>

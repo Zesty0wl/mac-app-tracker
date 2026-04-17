@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Subscriptions -- Admin -- App Tracker</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+        .stat-card { background: #fff; border-radius: 10px; padding: 1.25rem;
+                     box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        .stat-card .label { font-size: .8rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+        .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: .25rem; }
+        .section { background: #fff; border-radius: 10px; padding: 1.5rem;
+                   box-shadow: 0 1px 6px rgba(0,0,0,.06); margin-bottom: 1.5rem; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: .75rem; }
+        .toolbar h2 { font-size: 1.2rem; margin: 0; }
+        .toolbar-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+        table { width: 100%; border-collapse: collapse; font-size: .875rem; background: #fff;
+                border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        th, td { text-align: left; padding: .65rem .75rem; border-bottom: 1px solid #e5e7eb; }
+        th { font-weight: 600; color: #6b7280; font-size: .75rem; text-transform: uppercase;
+             letter-spacing: .04em; background: #f9fafb; position: sticky; top: 0; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px;
+                 font-size: .75rem; font-weight: 600; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .badge-gray { background: #e5e7eb; color: #4b5563; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .btn { display: inline-block; padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+               font-weight: 500; text-decoration: none; cursor: pointer; border: none; transition: background .15s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-sm { padding: .35rem .75rem; font-size: .8rem; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .btn-warning:hover { background: #d97706; }
+        .actions { display: flex; gap: .5rem; }
+        .text-muted { color: #6b7280; font-size: .8rem; }
+        .email-col { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .app-tags { display: flex; flex-wrap: wrap; gap: .25rem; }
+
+        /* Filter bar */
+        .filter-bar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        .filter-bar select, .filter-bar input { padding: .4rem .6rem; border: 1px solid #d1d5db;
+            border-radius: 6px; font-size: .85rem; font-family: inherit; }
+        .filter-bar input { width: 220px; }
+
+        /* Modal */
+        .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+                          z-index: 100; align-items: center; justify-content: center; }
+        .modal-backdrop.open { display: flex; }
+        .modal { background: #fff; border-radius: 12px; padding: 2rem; width: 100%; max-width: 560px;
+                 box-shadow: 0 8px 32px rgba(0,0,0,.15); max-height: 90vh; overflow-y: auto; }
+        .modal h2 { font-size: 1.25rem; margin-bottom: 1.25rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: .25rem; }
+        .form-group input, .form-group select { width: 100%; padding: .5rem .75rem; border: 1px solid #d1d5db;
+            border-radius: 8px; font-size: .9rem; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+        .form-group .hint { font-size: .75rem; color: #9ca3af; margin-top: .2rem; }
+        .form-actions { display: flex; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; }
+        .form-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
+                      border-radius: 8px; padding: .6rem; margin-bottom: 1rem; font-size: .85rem; display: none; }
+        .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .4rem; }
+        .checkbox-grid label { font-weight: 400; font-size: .85rem; display: flex; align-items: center; gap: .35rem; cursor: pointer; }
+        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+
+        /* Settings panel */
+        .settings-row { display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; align-items: center; margin-bottom: .75rem; }
+        .settings-row label { font-size: .85rem; }
+        .settings-row input[type="number"] { width: 70px; padding: .35rem .5rem; border: 1px solid #d1d5db;
+            border-radius: 6px; font-size: .85rem; text-align: center; }
+        .toggle { position: relative; width: 40px; height: 22px; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1;
+            border-radius: 22px; transition: .2s; }
+        .toggle .slider::before { content: ''; position: absolute; height: 16px; width: 16px;
+            left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+        .toggle input:checked + .slider { background: #2563eb; }
+        .toggle input:checked + .slider::before { transform: translateX(18px); }
+        .status-msg { font-size: .875rem; margin-left: .5rem; }
+        .status-msg.ok { color: #059669; }
+        .status-msg.err { color: #dc2626; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}">Apps</a>
+            <a href="{{ url_for('admin.email_page') }}">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}" class="active">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}">Logs</a>
+            <a href="{{ url_for('index') }}">&larr; Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Stats -->
+        <div class="grid">
+            <div class="stat-card">
+                <div class="label">Total Subscribers</div>
+                <div class="value" id="stat-total">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Confirmed</div>
+                <div class="value" id="stat-confirmed">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Active</div>
+                <div class="value" id="stat-active">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Pending</div>
+                <div class="value" id="stat-pending">--</div>
+            </div>
+        </div>
+
+        <!-- Automation settings -->
+        <div class="section">
+            <h2>Automation Rules</h2>
+            <div class="settings-row">
+                <label>Auto-cleanup unconfirmed subscribers after</label>
+                <input type="number" id="cleanup-days" min="1" max="365" value="7">
+                <label class="toggle">
+                    <input type="checkbox" id="cleanup-enabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="settings-row">
+                <label>Send confirmation reminder after</label>
+                <input type="number" id="reminder-days" min="1" max="30" value="2">
+                <label class="toggle">
+                    <input type="checkbox" id="reminder-enabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div style="display:flex;gap:.75rem;align-items:center;margin-top:1rem;">
+                <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Settings</button>
+                <span id="settings-status" class="status-msg"></span>
+            </div>
+            <p class="text-muted" style="margin-top:.75rem;">
+                Days are measured from sign-up date. Reminders are sent at most once per 24 hours per subscriber.
+                Automation runs hourly alongside the version check.
+            </p>
+        </div>
+
+        <!-- Manual actions -->
+        <div class="section">
+            <h2>Manual Actions</h2>
+            <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;">
+                <button class="btn btn-warning btn-sm" onclick="runCleanup()">
+                    Clean Up Unconfirmed Now
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="runReminders()">
+                    Send Reminders Now
+                </button>
+                <span id="action-status" class="status-msg"></span>
+            </div>
+        </div>
+
+        <!-- Subscribers table -->
+        <div class="toolbar">
+            <h2>Subscribers</h2>
+        </div>
+
+        <div class="filter-bar">
+            <select id="filter-status" onchange="renderTable()">
+                <option value="all">All statuses</option>
+                <option value="confirmed-active">Confirmed & Active</option>
+                <option value="confirmed-inactive">Confirmed & Inactive</option>
+                <option value="unconfirmed">Unconfirmed</option>
+            </select>
+            <input type="text" id="filter-search" placeholder="Search email..." oninput="renderTable()">
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Subscriptions</th>
+                    <th>Signed Up</th>
+                    <th>Confirmed</th>
+                    <th>Last Notified</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="subs-body">
+                <tr><td colspan="7" class="text-muted">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-backdrop" id="modal">
+        <div class="modal">
+            <h2>Edit Subscriber</h2>
+            <div class="form-error" id="form-error"></div>
+            <form id="edit-form" onsubmit="return saveSubscriber(event)">
+                <input type="hidden" id="f-id">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="text" id="f-email" readonly style="background:#f3f4f6;">
+                </div>
+                <div class="form-group">
+                    <label>Confirmed</label>
+                    <select id="f-confirmed">
+                        <option value="1">Yes</option>
+                        <option value="0">No</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Active</label>
+                    <select id="f-active">
+                        <option value="1">Yes</option>
+                        <option value="0">No</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Subscribed Apps</label>
+                    <div class="hint" style="margin-bottom:.4rem;">No selections = subscribed to all apps.</div>
+                    <div class="checkbox-grid" id="f-apps"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const base = location.pathname.replace(/\/admin\/.*$/, '');
+        let allSubscribers = [];
+        let allApps = [];
+
+        async function apiFetch(path, opts) {
+            const r = await fetch(base + '/admin/api' + path, opts);
+            if (r.status === 401) { location.href = base + '/admin/login'; return null; }
+            return r;
+        }
+
+        function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function fmtDate(s) {
+            if (!s) return '--';
+            const d = new Date(s + (s.includes('Z') || s.includes('+') ? '' : 'Z'));
+            return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })
+                 + ' ' + d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+        }
+
+        function statusBadge(sub) {
+            if (!sub.confirmed) return '<span class="badge badge-yellow">Unconfirmed</span>';
+            if (!sub.active) return '<span class="badge badge-red">Inactive</span>';
+            return '<span class="badge badge-green">Active</span>';
+        }
+
+        function appTags(ids) {
+            if (!ids || !ids.length) return '<span class="badge badge-blue">All Apps</span>';
+            return ids.map(id => {
+                const app = allApps.find(a => a.app_id === id);
+                const name = app ? app.name : id;
+                return `<span class="badge badge-gray">${esc(name)}</span>`;
+            }).join(' ');
+        }
+
+        function renderTable() {
+            const status = document.getElementById('filter-status').value;
+            const search = document.getElementById('filter-search').value.toLowerCase();
+
+            let filtered = allSubscribers.filter(s => {
+                if (search && !s.email.toLowerCase().includes(search)) return false;
+                if (status === 'confirmed-active') return s.confirmed && s.active;
+                if (status === 'confirmed-inactive') return s.confirmed && !s.active;
+                if (status === 'unconfirmed') return !s.confirmed;
+                return true;
+            });
+
+            const tbody = document.getElementById('subs-body');
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-muted">No subscribers match the current filter.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filtered.map(s => `
+                <tr>
+                    <td class="email-col" title="${esc(s.email)}">${esc(s.email)}</td>
+                    <td>${statusBadge(s)}</td>
+                    <td><div class="app-tags">${appTags(s.app_ids)}</div></td>
+                    <td class="text-muted">${fmtDate(s.created_at)}</td>
+                    <td class="text-muted">${fmtDate(s.confirmed_at)}</td>
+                    <td class="text-muted">${fmtDate(s.last_notification)}</td>
+                    <td class="actions">
+                        <button class="btn btn-secondary btn-sm" onclick='openEdit(${JSON.stringify(s)})'>Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSub(${s.id}, '${esc(s.email)}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadAll() {
+            // Load apps list for name mapping
+            try {
+                const appsR = await apiFetch('/apps');
+                if (appsR) allApps = await appsR.json();
+            } catch(e) { console.error(e); }
+
+            // Load subscribers + stats
+            const r = await apiFetch('/subscriptions');
+            if (!r) return;
+            const data = await r.json();
+            allSubscribers = data.subscribers || [];
+            const st = data.stats || {};
+            document.getElementById('stat-total').textContent = st.total_subscribers ?? '--';
+            document.getElementById('stat-confirmed').textContent = st.confirmed_subscribers ?? '--';
+            document.getElementById('stat-active').textContent = st.active_subscribers ?? '--';
+            document.getElementById('stat-pending').textContent = st.pending_confirmations ?? '--';
+            renderTable();
+        }
+
+        async function loadSettings() {
+            const r = await apiFetch('/subscriptions/settings');
+            if (!r) return;
+            const s = await r.json();
+            document.getElementById('cleanup-enabled').checked = s.auto_cleanup_enabled;
+            document.getElementById('cleanup-days').value = s.auto_cleanup_days;
+            document.getElementById('reminder-enabled').checked = s.auto_reminder_enabled;
+            document.getElementById('reminder-days').value = s.auto_reminder_days;
+        }
+
+        async function saveSettings() {
+            const el = document.getElementById('settings-status');
+            el.textContent = 'Saving...'; el.className = 'status-msg';
+            const r = await apiFetch('/subscriptions/settings', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    auto_cleanup_enabled: document.getElementById('cleanup-enabled').checked,
+                    auto_cleanup_days: parseInt(document.getElementById('cleanup-days').value) || 7,
+                    auto_reminder_enabled: document.getElementById('reminder-enabled').checked,
+                    auto_reminder_days: parseInt(document.getElementById('reminder-days').value) || 2,
+                })
+            });
+            if (r && r.ok) { el.textContent = 'Saved'; el.className = 'status-msg ok'; }
+            else { el.textContent = 'Error'; el.className = 'status-msg err'; }
+            setTimeout(() => el.textContent = '', 3000);
+        }
+
+        async function runCleanup() {
+            const days = parseInt(document.getElementById('cleanup-days').value) || 7;
+            if (!confirm(`Delete all unconfirmed subscribers older than ${days} day(s)?`)) return;
+            const el = document.getElementById('action-status');
+            el.textContent = 'Running...'; el.className = 'status-msg';
+            const r = await apiFetch('/subscriptions/cleanup', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ days })
+            });
+            if (r) {
+                const d = await r.json();
+                if (d.ok) { el.textContent = `Deleted ${d.deleted} subscriber(s)`; el.className = 'status-msg ok'; loadAll(); }
+                else { el.textContent = d.error || 'Error'; el.className = 'status-msg err'; }
+            }
+            setTimeout(() => el.textContent = '', 5000);
+        }
+
+        async function runReminders() {
+            const days = parseInt(document.getElementById('reminder-days').value) || 2;
+            const el = document.getElementById('action-status');
+            el.textContent = 'Sending...'; el.className = 'status-msg';
+            const r = await apiFetch('/subscriptions/send-reminders', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ days })
+            });
+            if (r) {
+                const d = await r.json();
+                if (d.ok) { el.textContent = `Sent ${d.sent} of ${d.pending} reminder(s)`; el.className = 'status-msg ok'; }
+                else { el.textContent = d.error || 'Error'; el.className = 'status-msg err'; }
+            }
+            setTimeout(() => el.textContent = '', 5000);
+        }
+
+        // Edit modal
+        function openEdit(sub) {
+            document.getElementById('f-id').value = sub.id;
+            document.getElementById('f-email').value = sub.email;
+            document.getElementById('f-confirmed').value = sub.confirmed ? '1' : '0';
+            document.getElementById('f-active').value = sub.active ? '1' : '0';
+            document.getElementById('form-error').style.display = 'none';
+
+            // Build app checkboxes
+            const container = document.getElementById('f-apps');
+            container.innerHTML = allApps.map(a => {
+                const checked = sub.app_ids && sub.app_ids.includes(a.app_id) ? 'checked' : '';
+                return `<label><input type="checkbox" name="app" value="${esc(a.app_id)}" ${checked}> ${esc(a.name)}</label>`;
+            }).join('');
+
+            document.getElementById('modal').classList.add('open');
+        }
+        function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+        async function saveSubscriber(e) {
+            e.preventDefault();
+            const id = document.getElementById('f-id').value;
+            const errEl = document.getElementById('form-error');
+            errEl.style.display = 'none';
+
+            const checkedApps = [...document.querySelectorAll('#f-apps input[type=checkbox]:checked')]
+                .map(cb => cb.value);
+
+            const r = await apiFetch(`/subscriptions/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    confirmed: document.getElementById('f-confirmed').value === '1',
+                    active: document.getElementById('f-active').value === '1',
+                    app_ids: checkedApps,
+                })
+            });
+            if (r && r.ok) { closeModal(); loadAll(); }
+            else {
+                const d = r ? await r.json() : {};
+                errEl.textContent = d.error || 'Failed to save'; errEl.style.display = 'block';
+            }
+        }
+
+        async function deleteSub(id, email) {
+            if (!confirm(`Permanently delete subscriber ${email}?`)) return;
+            const r = await apiFetch(`/subscriptions/${id}`, { method: 'DELETE' });
+            if (r && r.ok) loadAll();
+        }
+
+        // Init
+        loadAll();
+        loadSettings();
+    </script>
+</body>
+</html>

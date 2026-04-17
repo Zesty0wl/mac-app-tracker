@@ -1,0 +1,28 @@
+{#
+    Site header / navigation.
+
+    Driven entirely by the branding context (see inject_branding() in web_app.py):
+      - site_name        : brand text
+      - brand_url        : where the brand text links to
+      - nav_links        : list of {label, href, target?, match?}
+        - target (optional): e.g. "_blank"
+        - match  (optional): path prefix used to decide the active state.
+          If absent, we compare against href.
+
+    To fully replace the markup (for custom branding with a logo, etc.)
+    drop a file at ${TEMPLATE_OVERRIDE_DIR}/_header.html.
+#}
+<nav>
+    <div class="nav-content">
+        <a href="{{ brand_url }}" class="nav-brand">{{ brand_name }}</a>
+        {% if nav_links %}
+        <div class="nav-links">
+            {% for link in nav_links %}
+                {%- set match = link.match or link.href -%}
+                {%- set is_active = request.path == match or (match != '/' and request.path.startswith(match)) -%}
+                <a href="{{ link.href }}"{% if link.target %} target="{{ link.target }}" rel="noopener"{% endif %}{% if is_active %} class="active"{% endif %}>{{ link.label }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</nav>

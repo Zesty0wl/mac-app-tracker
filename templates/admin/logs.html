@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Logs — App Tracker Admin</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;
+                   flex-wrap: wrap; gap: .75rem; }
+        .toolbar h2 { font-size: 1.2rem; }
+        .filters { display: flex; gap: .75rem; align-items: center; }
+        .filters select { padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px;
+                          font-size: .85rem; background: #fff; }
+        .btn { display: inline-block; padding: .5rem 1rem; border-radius: 8px; font-size: .875rem;
+               font-weight: 500; cursor: pointer; border: none; transition: background .15s; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        table { width: 100%; border-collapse: collapse; font-size: .85rem; background: #fff;
+                border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        th, td { text-align: left; padding: .55rem .75rem; border-bottom: 1px solid #e5e7eb; }
+        th { font-weight: 600; color: #6b7280; font-size: .75rem; text-transform: uppercase;
+             letter-spacing: .04em; background: #f9fafb; position: sticky; top: 0; }
+        .msg-col { max-width: 500px; word-break: break-word; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px;
+                 font-size: .7rem; font-weight: 600; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .text-muted { color: #6b7280; }
+        .log-wrap { max-height: 75vh; overflow-y: auto; border-radius: 10px; }
+        .count { font-size: .85rem; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}">Apps</a>
+            <a href="{{ url_for('admin.email_page') }}">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}" class="active">Logs</a>
+            <a href="{{ url_for('index') }}">← Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="toolbar">
+            <div style="display:flex;align-items:center;gap:1rem;">
+                <h2>System Logs</h2>
+                <span class="count" id="log-count"></span>
+            </div>
+            <div class="filters">
+                <select id="filter-level" onchange="loadLogs()">
+                    <option value="">All levels</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+                <select id="filter-source" onchange="loadLogs()">
+                    <option value="">All sources</option>
+                    <option value="auth">auth</option>
+                    <option value="admin">admin</option>
+                    <option value="migration">migration</option>
+                    <option value="system">system</option>
+                    <option value="tracker">tracker</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadLogs()">Refresh</button>
+                <button class="btn btn-danger" onclick="clearLogs()">Clear Logs</button>
+            </div>
+        </div>
+
+        <div class="log-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:170px;">Timestamp</th>
+                        <th style="width:70px;">Level</th>
+                        <th style="width:100px;">Source</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body">
+                    <tr><td colspan="4" class="text-muted">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const base = location.pathname.replace(/\/admin\/.*$/, '');
+        async function apiFetch(path, opts) {
+            const r = await fetch(base + '/admin/api' + path, opts);
+            if (r.status === 401) { location.href = base + '/admin/login'; return null; }
+            return r;
+        }
+
+        async function loadLogs() {
+            const level = document.getElementById('filter-level').value;
+            const source = document.getElementById('filter-source').value;
+            let qs = '?limit=500';
+            if (level) qs += '&level=' + level;
+            if (source) qs += '&source=' + source;
+
+            const r = await apiFetch('/logs' + qs);
+            if (!r) return;
+            const logs = await r.json();
+
+            document.getElementById('log-count').textContent = `${logs.length} entries`;
+
+            const tbody = document.getElementById('log-body');
+            if (!logs.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-muted">No log entries found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = logs.map(l => {
+                const cls = l.level === 'ERROR' ? 'badge-red' :
+                            l.level === 'WARN' ? 'badge-yellow' : 'badge-blue';
+                const time = new Date(l.timestamp).toLocaleString();
+                return `<tr>
+                    <td class="text-muted">${time}</td>
+                    <td><span class="badge ${cls}">${l.level}</span></td>
+                    <td>${esc(l.source)}</td>
+                    <td class="msg-col">${esc(l.message)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        async function clearLogs() {
+            if (!confirm('Clear all logs? This cannot be undone.')) return;
+            await apiFetch('/logs', { method: 'DELETE' });
+            loadLogs();
+        }
+
+        loadLogs();
+    </script>
+</body>
+</html>

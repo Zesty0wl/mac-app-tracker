@@ -1,0 +1,26 @@
+# Core application dependencies
+flask
+gunicorn
+PyJWT
+
+# Email functionality dependencies
+requests
+python-dotenv
+resend
+
+# No additional Python packages required for core functionality
+# The script uses only Python standard library modules:
+# - urllib (for downloading)
+# - plistlib (for parsing Info.plist)
+# - subprocess (for running extraction tools)
+# - pathlib, tempfile, gzip, shutil, os, sys
+
+# System dependencies required (install via apt):
+# - p7zip-full (provides 7z command)
+#   OR
+# - xar (for extracting .pkg files)
+# - cpio (for extracting Payload archives)
+
+# Installation commands for Ubuntu/Debian:
+# sudo apt-get update
+# sudo apt-get install -y p7zip-full cpio

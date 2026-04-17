@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmation Error</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #d13438;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .help-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        .help-box h3 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .back-link {
+            display: inline-block;
+            background-color: #0078d4;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px;
+            transition: background-color 0.3s ease;
+        }
+        .back-link:hover {
+            background-color: #106ebe;
+        }
+        .subscribe-link {
+            background-color: #107c10;
+        }
+        .subscribe-link:hover {
+            background-color: #0e6d0e;
+        }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        .flash-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .flash-error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">❌</div>
+        <h1>Confirmation Failed</h1>
+        
+        <div class="message">
+            {{ message if message else "We couldn't confirm your subscription. The confirmation link may be invalid, expired, or already used." }}
+        </div>
+        
+        <div class="help-box">
+            <h3>🔧 What you can do:</h3>
+            <ul>
+                <li><strong>Check the link:</strong> Make sure you clicked the complete link from your email</li>
+                <li><strong>Time limit:</strong> Confirmation links expire after 24 hours</li>
+                <li><strong>Already confirmed:</strong> You may have already confirmed this subscription</li>
+                <li><strong>Try again:</strong> You can submit a new subscription request</li>
+            </ul>
+        </div>
+        
+        <a href="{{ url_for('subscribe_page') }}" class="back-link subscribe-link">Subscribe Again</a>
+        <a href="{{ url_for('index') }}" class="back-link">← Back to Version Tracker</a>
+    </div>
+
+    {% include '_footer.html' %}
+</body>
+</html>
