@@ -22,6 +22,9 @@ Originally built for Microsoft Mac apps (Company Portal, Defender, Edge, Office)
 ### Docker Compose (recommended)
 
 ```bash
+git clone https://github.com/Zesty0wl/mac-app-tracker.git
+cd mac-app-tracker
+
 cp .env.template .env
 
 # Generate the two required secrets and write them into .env
@@ -47,6 +50,9 @@ password from `ADMIN_PASSWORD`).
 ### Manual Installation
 
 ```bash
+git clone https://github.com/Zesty0wl/mac-app-tracker.git
+cd mac-app-tracker
+
 # System dependencies (Ubuntu/Debian)
 sudo apt-get install -y p7zip-full cpio file
 
