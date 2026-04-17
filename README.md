@@ -10,12 +10,12 @@ Originally built for Microsoft Mac apps (Company Portal, Defender, Edge, Office)
 
 - **Automatic hourly checks** with header-aware change detection (ETag / Last-Modified) to skip redundant downloads
 - **Web UI** for browsing release history, update heatmaps, and subscribing to email notifications
-- **Admin panel** (JWT auth) for managing tracked apps, configuring email providers, and viewing logs
+- **Admin panel** (JWT auth, rate-limited with per-account lockout) for managing tracked apps, configuring email providers, and viewing logs
 - **Pluggable email** -- Microsoft 365 Graph API and Resend are supported out of the box; falls back to a no-op provider when unconfigured
 - **Email subscriptions** with double opt-in confirmation and per-app filtering
 - **Component tracking** and SHA-256 checksums for suite packages (Office, Defender)
 - **CLI** for manual scans, history export, and URL validation
-- **Docker-first** with `docker compose up -d`
+- **Docker-first** with `docker compose up -d`; footer shows the deployed version + short git SHA
 
 ## Quick Start
 
@@ -23,12 +23,26 @@ Originally built for Microsoft Mac apps (Company Portal, Defender, Edge, Office)
 
 ```bash
 cp .env.template .env
-# Edit .env with your email provider credentials (optional) and admin password
+
+# Generate the two required secrets and write them into .env
+sed -i "s|^FLASK_SECRET_KEY=.*|FLASK_SECRET_KEY=$(openssl rand -hex 32)|" .env
+sed -i "s|^ADMIN_JWT_SECRET=.*|ADMIN_JWT_SECRET=$(openssl rand -hex 32)|" .env
+
+# Set a strong ADMIN_PASSWORD and SITE_URL, then optionally add email
+# provider credentials.
+$EDITOR .env
 
 docker compose up -d
 ```
 
-The web interface is available at **http://localhost:5000**.
+The web interface is available at **http://localhost:5000** and the
+admin panel at **http://localhost:5000/admin** (username `admin`,
+password from `ADMIN_PASSWORD`).
+
+> The app refuses to boot if `FLASK_SECRET_KEY` or `ADMIN_JWT_SECRET`
+> are left at their placeholder values. Generate real values with
+> `openssl rand -hex 32` before starting, or set `DEV_MODE=true` for
+> local experimentation only.
 
 ### Manual Installation
 
@@ -257,26 +271,127 @@ The recommended production layout is:
 Cloudflare (DNS + TLS)  ->  nginx reverse proxy  ->  Docker container (127.0.0.1:5000)
 ```
 
-- **Cloudflare** handles public DNS and edge TLS. Point an A/AAAA record
-  (or CNAME) at your server. Set SSL/TLS mode to "Full (strict)" and
-  issue an origin cert from Cloudflare for the nginx host.
-- **nginx** terminates TLS on the server using the Cloudflare origin
-  cert and proxies requests on `127.0.0.1:5000` to the container. The
-  Flask app is reverse-proxy-aware and mounts itself under the
-  `/app-tracker` prefix.
-- **Docker** runs the tracker via `docker compose up -d`. Only bind
-  the container port to `127.0.0.1` in production so nginx is the
-  only public entry point.
+### 1. Prepare the server
 
-A working example config and step-by-step setup lives in
-[`nginx/`](nginx/) — copy `nginx/app-tracker.conf` into
-`/etc/nginx/sites-available/`, swap in your domain and cert paths,
-enable the site, and reload. The README there also covers co-hosting
-multiple apps on a single domain via extra path prefixes.
+On a fresh Linux host with Docker + Docker Compose v2 and nginx
+installed:
 
-Set `SITE_URL` in `.env` to the public HTTPS origin (e.g.
-`https://tracker.example.com`) so confirmation and unsubscribe links
-in outgoing emails use the correct address.
+```bash
+git clone https://github.com/Zesty0wl/mac-app-tracker.git /opt/app-tracker
+cd /opt/app-tracker
+cp .env.template .env
+```
+
+Fill in `.env` and **generate real values** for the required secrets
+— the container will refuse to start otherwise:
+
+```bash
+sed -i "s|^FLASK_SECRET_KEY=.*|FLASK_SECRET_KEY=$(openssl rand -hex 32)|" .env
+sed -i "s|^ADMIN_JWT_SECRET=.*|ADMIN_JWT_SECRET=$(openssl rand -hex 32)|" .env
+$EDITOR .env          # set ADMIN_PASSWORD, SITE_URL, email provider
+```
+
+At minimum you need `FLASK_SECRET_KEY`, `ADMIN_JWT_SECRET`,
+`ADMIN_PASSWORD` and `SITE_URL`. See the [Configuration](#configuration)
+section for the full variable list.
+
+### 2. Bind the container to localhost only
+
+Edit `docker-compose.yml` so the container is **not** reachable
+directly from the internet — nginx is the only public entry point:
+
+```yaml
+services:
+  app:
+    ports:
+      - "127.0.0.1:5000:5000"   # localhost-only bind
+```
+
+### 3. Start the container
+
+```bash
+docker compose up -d
+docker compose logs -f         # watch it boot; Ctrl+C when happy
+```
+
+The footer shows the running version (e.g. `v1.0.0+abc1234`) — the
+commit SHA comes from `git rev-parse --short HEAD` at build time, so
+rebuilds automatically refresh it.
+
+### 4. Configure Cloudflare
+
+- Add an A/AAAA record (proxied, orange cloud) for your domain pointing
+  at the server's public IP.
+- Under **SSL/TLS** set mode to **Full (strict)**.
+- Under **SSL/TLS -> Origin Server** create an origin certificate for
+  your domain and save the cert + private key on the server (e.g. at
+  `/etc/ssl/certs/cloudflare/yourdomain.pem` and
+  `/etc/ssl/private/cloudflare/yourdomain.key`).
+
+### 5. Configure nginx
+
+Copy the example from the repo and adjust:
+
+```bash
+sudo cp nginx/app-tracker.conf /etc/nginx/sites-available/app-tracker
+sudo $EDITOR /etc/nginx/sites-available/app-tracker   # set server_name + cert paths
+sudo ln -s /etc/nginx/sites-available/app-tracker /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The sample config at [`nginx/app-tracker.conf`](nginx/app-tracker.conf)
+terminates TLS, forwards `X-Forwarded-*` headers (required by the
+Flask app's `ProxyFix`), and includes a commented-out `limit_req_zone`
+block for edge-level rate limiting on `/admin/login` as defence in
+depth. See [`nginx/README.md`](nginx/README.md) for multi-app hosting
+under a single domain.
+
+### 6. Verify
+
+```bash
+curl -sI https://yourdomain.com/app-tracker/       # expect HTTP/2 200
+```
+
+- Visit `https://yourdomain.com/app-tracker/` — main UI
+- Visit `https://yourdomain.com/app-tracker/admin` — log in with
+  `admin` / your `ADMIN_PASSWORD`
+- Confirm the version string above the footer matches the commit you
+  deployed.
+
+### 7. Updating
+
+```bash
+cd /opt/app-tracker
+git pull
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build
+docker compose up -d --force-recreate
+```
+
+`docker compose up -d --force-recreate` re-reads `.env` and swaps
+containers in-place. The footer version will flip to the new SHA
+once the new container is healthy.
+
+### Security checklist for production
+
+- [x] `FLASK_SECRET_KEY` and `ADMIN_JWT_SECRET` are random 32-byte
+      hex strings (the app will refuse to boot otherwise).
+- [x] `ADMIN_PASSWORD` is long and unique.
+- [x] Container port is bound to `127.0.0.1` so only nginx can reach it.
+- [x] nginx terminates TLS with a valid certificate (Cloudflare
+      origin or Let's Encrypt).
+- [x] `TRUSTED_PROXY_COUNT` is set correctly (`1` for nginx only,
+      `2` if you are also behind Cloudflare). This ensures
+      `X-Forwarded-For` and the admin login rate limiter see real
+      client IPs.
+- [x] Review `ADMIN_LOGIN_RATE_LIMIT`, `ADMIN_MAX_FAILED_ATTEMPTS`,
+      `ADMIN_LOCKOUT_MINUTES` if defaults are too loose/strict.
+- [x] Optionally enable the nginx `limit_req_zone` block in
+      `nginx/app-tracker.conf` for a second layer of rate limiting.
+- [x] Consider putting the admin panel behind a Cloudflare Access
+      rule or IP allowlist at the nginx layer.
+
+See also the [Login security](#login-security) subsection for the
+built-in brute-force mitigations.
 
 ## API
 
@@ -313,6 +428,38 @@ tracker/
   validator.py              # Re-check stored URLs and flag removed assets
 templates/                  # Jinja2 templates (main UI, subscription, admin)
 static/                     # CSS and images
+```
+
+## Versioning
+
+The canonical version lives in the [`VERSION`](VERSION) file at the
+repo root (plain semver, one line, e.g. `1.0.0`). At runtime the app
+resolves the version in this order:
+
+1. `APP_VERSION` env var (useful for CI builds from a tag)
+2. Contents of `VERSION`
+3. Fallback: `0.0.0`
+
+If a short git SHA is available it is appended as `+<sha>`. Sources,
+in order:
+
+1. `GIT_SHA` env var (baked into the Docker image by the bundled
+   Dockerfile via `ARG GIT_SHA`)
+2. `git rev-parse --short HEAD` run inside the container (only works
+   if the `.git` directory is present, e.g. in development)
+
+The resulting string — e.g. `v1.0.0+521172f` — is rendered as a small
+muted line above the footer on every page and links to
+`<SOURCE_URL>/releases`.
+
+To cut a release:
+
+```bash
+echo "1.2.0" > VERSION
+git commit -am "Release v1.2.0"
+git tag v1.2.0 && git push --tags
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build
+docker compose up -d --force-recreate
 ```
 
 ## License
