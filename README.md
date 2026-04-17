@@ -48,27 +48,97 @@ flask --app web_app run --host 0.0.0.0 --port 5000
 
 ### Environment Variables
 
-Copy `.env.template` to `.env` and configure:
+All runtime configuration comes from a single `.env` file in the
+project root (the same directory as `docker-compose.yml`). Docker
+Compose loads it automatically via the `env_file: .env` stanza in
+`docker-compose.yml`, and the Flask app reads from `os.environ` at
+startup.
+
+#### Creating the file
+
+Two starter files ship with the repo:
+
+- **`.env.template`** — bare minimum (admin + email provider secrets).
+- **`.env.example`** — full reference, including every branding
+  variable with inline comments and examples.
+
+Copy whichever you prefer and edit it:
+
+```bash
+cp .env.example .env      # or: cp .env.template .env
+$EDITOR .env
+```
+
+`.env` is already listed in [`.gitignore`](.gitignore) — do not commit
+it.
+
+#### Syntax
+
+Standard dotenv format, one variable per line:
+
+```dotenv
+# Comments start with a hash.
+KEY=value
+ANOTHER_KEY=another value
+
+# Quote values only if they contain a '#' or leading/trailing whitespace.
+# Most values (including JSON) do NOT need quotes.
+NAV_LINKS_JSON=[{"label":"App Tracker","href":"/"}]
+
+# No spaces around '=', no trailing semicolons.
+# Newlines inside a value are not supported - keep each var on one line.
+```
+
+After editing `.env`, restart the container so Docker picks up the
+changes:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+Environment variables can also be overridden per-deployment via
+`docker-compose.override.yml` (also gitignored) or by exporting them
+in the shell before `docker compose up` — useful in CI.
+
+#### Required / common variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `ADMIN_PASSWORD` | Yes | Password for the `/admin` panel |
-| `ADMIN_JWT_SECRET` | Yes | Random secret for JWT signing |
-| `SITE_URL` | Yes | Public URL (used in email links) |
+| `ADMIN_PASSWORD` | Yes | Password for the `/admin` panel. Seeded on first boot as the `admin` user |
+| `ADMIN_JWT_SECRET` | Yes | Random secret for admin JWT signing. Generate with e.g. `openssl rand -hex 32` |
+| `FLASK_SECRET_KEY` | Yes | Flask session secret. Generate with `openssl rand -hex 32` |
+| `SITE_URL` | Yes | Public HTTPS origin, used in email links. Example: `https://tracker.example.com` (no trailing slash) |
+| `DEV_MODE` | No | `true` mounts under `/app-tracker-dev` and disables the scheduler. Default `false` |
+| `DB_PATH` | No | SQLite path for version DB. Default `/data/microsoft_apps_versions.db` inside the container |
+| `SUBSCRIPTION_DB_PATH` | No | SQLite path for subscriptions DB. Default `/data/subscriptions.db` |
+
+#### Email provider (choose one)
+
+Pick **either** Microsoft 365 Graph **or** Resend. You can also leave
+all of these unset and configure the provider from the admin UI at
+`/admin/email` instead — values saved there take precedence over env
+vars.
+
+| Variable | Required | Description |
+|---|---|---|
 | `M365_CLIENT_ID` | If using M365 | Entra App Registration client ID |
 | `M365_CLIENT_SECRET` | If using M365 | Entra App Registration client secret |
 | `M365_TENANT_ID` | If using M365 | Azure AD tenant ID |
 | `SENDER_EMAIL` | If using M365 | Mailbox to send from |
-| `RESEND_API_KEY` | If using Resend | Resend API key |
+| `RESEND_API_KEY` | If using Resend | Resend API key (`re_...`) |
 | `RESEND_FROM_EMAIL` | If using Resend | Verified sender address |
-| `NOTIFICATION_RECIPIENTS` | No | Comma-separated default recipients |
-| `PLAUSIBLE_DOMAIN` | No | Plausible analytics domain |
-| `PLAUSIBLE_SCRIPT_URL` | No | Plausible script URL |
+| `NOTIFICATION_RECIPIENTS` | No | Comma-separated default recipients for admin/test emails |
+
+#### Optional: analytics & UI
+
+| Variable | Required | Description |
+|---|---|---|
+| `PLAUSIBLE_DOMAIN` | No | Plausible analytics domain (e.g. `tracker.example.com`) |
+| `PLAUSIBLE_SCRIPT_URL` | No | Plausible script URL (e.g. `https://plausible.io/js/script.js`) |
 | `CONTACT_EMAIL` | No | Contact email shown in the UI |
 
-Email provider settings can also be configured from the admin UI at `/admin/email`. Settings saved there take precedence over environment variables.
-
-See `.env.example` for the full list, including the branding variables documented below.
+See [`.env.example`](.env.example) for the full list with inline
+comments, including the branding variables documented below.
 
 ### Branding / white-labelling
 
