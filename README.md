@@ -146,6 +146,35 @@ python3 download_and_analyze.py --export-json output.json
 python3 download_and_analyze.py all --keep-downloads
 ```
 
+## Publishing / Deployment
+
+The recommended production layout is:
+
+```
+Cloudflare (DNS + TLS)  ->  nginx reverse proxy  ->  Docker container (127.0.0.1:5000)
+```
+
+- **Cloudflare** handles public DNS and edge TLS. Point an A/AAAA record
+  (or CNAME) at your server. Set SSL/TLS mode to "Full (strict)" and
+  issue an origin cert from Cloudflare for the nginx host.
+- **nginx** terminates TLS on the server using the Cloudflare origin
+  cert and proxies requests on `127.0.0.1:5000` to the container. The
+  Flask app is reverse-proxy-aware and mounts itself under the
+  `/app-tracker` prefix.
+- **Docker** runs the tracker via `docker compose up -d`. Only bind
+  the container port to `127.0.0.1` in production so nginx is the
+  only public entry point.
+
+A working example config and step-by-step setup lives in
+[`nginx/`](nginx/) — copy `nginx/app-tracker.conf` into
+`/etc/nginx/sites-available/`, swap in your domain and cert paths,
+enable the site, and reload. The README there also covers co-hosting
+multiple apps on a single domain via extra path prefixes.
+
+Set `SITE_URL` in `.env` to the public HTTPS origin (e.g.
+`https://tracker.example.com`) so confirmation and unsubscribe links
+in outgoing emails use the correct address.
+
 ## API
 
 See [API.md](API.md) for full endpoint documentation. Key endpoints:
