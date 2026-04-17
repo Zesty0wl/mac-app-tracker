@@ -24,8 +24,22 @@ from admin import database as adb
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin',
                      template_folder='../templates')
 
-JWT_SECRET = os.environ.get('ADMIN_JWT_SECRET', 'change-me-in-production')
+_DEFAULT_JWT_SECRET = 'change-me-in-production'
+JWT_SECRET = os.environ.get('ADMIN_JWT_SECRET', _DEFAULT_JWT_SECRET)
 JWT_EXPIRY_HOURS = 8
+
+# Refuse to run with the placeholder secret outside of explicit dev mode.
+if JWT_SECRET == _DEFAULT_JWT_SECRET:
+    if os.environ.get('DEV_MODE', 'false').lower() != 'true':
+        raise RuntimeError(
+            "ADMIN_JWT_SECRET is not set. Generate one with "
+            "`openssl rand -hex 32` and set it in .env, or set DEV_MODE=true "
+            "to bypass this check for local development."
+        )
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "ADMIN_JWT_SECRET is using the insecure default; DEV_MODE=true is set."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +101,22 @@ def login_post():
         username = request.form.get('username', '')
         password = request.form.get('password', '')
 
+    # Check account lockout BEFORE verifying the password. Returns (False, 0)
+    # for unknown usernames so attackers can't enumerate accounts by timing.
+    locked, seconds_remaining = adb.get_lockout_status(username)
+    if locked:
+        minutes = max(1, (seconds_remaining + 59) // 60)
+        adb.add_log('WARN', 'auth',
+                    f'Login attempt against locked account: {username} '
+                    f'({seconds_remaining}s remaining)')
+        msg = (f'Account temporarily locked due to repeated failed logins. '
+               f'Try again in ~{minutes} minute(s).')
+        if request.is_json:
+            return jsonify({'error': msg}), 429
+        return render_template('admin/login.html', error=msg), 429
+
     if adb.verify_admin(username, password):
+        adb.reset_failed_login(username)
         adb.update_last_login(username)
         adb.add_log('INFO', 'auth', f'Admin login: {username}')
         token = _create_token(username)
@@ -99,7 +128,13 @@ def login_post():
                         samesite='Lax', max_age=JWT_EXPIRY_HOURS * 3600)
         return resp
 
-    adb.add_log('WARN', 'auth', f'Failed login attempt for: {username}')
+    attempts, lockout_seconds = adb.record_failed_login(username)
+    if lockout_seconds:
+        adb.add_log('WARN', 'auth',
+                    f'Account locked after {attempts} failed logins: {username}')
+    else:
+        adb.add_log('WARN', 'auth',
+                    f'Failed login attempt for: {username} (attempt {attempts})')
     if request.is_json:
         return jsonify({'error': 'Invalid credentials'}), 401
     return render_template('admin/login.html', error='Invalid username or password')

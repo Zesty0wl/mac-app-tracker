@@ -8,7 +8,10 @@ by automation scripts.
 """
 
 from flask import Flask, jsonify, render_template, send_from_directory, request, redirect, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from jinja2 import ChoiceLoader, FileSystemLoader
+from werkzeug.middleware.proxy_fix import ProxyFix
 from tracker.database import VersionDatabase
 from notifications.manager import SubscriptionManager
 from tracker.config import load_apps_config, build_identifier_lookup
@@ -19,7 +22,29 @@ import json
 import logging
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-key-change-in-production')
+
+_DEFAULT_FLASK_SECRET = 'dev-key-change-in-production'
+_flask_secret = os.environ.get('FLASK_SECRET_KEY', _DEFAULT_FLASK_SECRET)
+_DEV_MODE = os.environ.get('DEV_MODE', 'false').lower() == 'true'
+if _flask_secret == _DEFAULT_FLASK_SECRET and not _DEV_MODE:
+    raise RuntimeError(
+        "FLASK_SECRET_KEY is not set. Generate one with "
+        "`openssl rand -hex 32` and set it in .env, or set DEV_MODE=true "
+        "to bypass this check for local development."
+    )
+app.secret_key = _flask_secret
+
+# Rate limit abusive endpoints (login brute-force in particular). The
+# in-memory storage is per-worker, but combined with the DB-backed account
+# lockout in admin.database this is sufficient for the 2-worker default.
+# For multi-host deployments point ``RATELIMIT_STORAGE_URI`` at Redis.
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', 'memory://'),
+    headers_enabled=True,
+)
 
 # Allow operators to override any bundled template (e.g. _header.html, _footer.html)
 # by mounting a directory at TEMPLATE_OVERRIDE_DIR. Overrides are checked first.
@@ -35,6 +60,30 @@ if os.path.isdir(_template_override_dir):
 
 # Register admin blueprint
 app.register_blueprint(admin_bp)
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    """Render a friendly page for rate-limited requests (primarily the admin
+    login form) and keep JSON shape for API callers."""
+    if request.path.startswith('/admin/') and not request.is_json:
+        return render_template(
+            'admin/login.html',
+            error='Too many login attempts. Please wait a few minutes and try again.'
+        ), 429
+    return jsonify({'error': 'Too many requests', 'detail': str(e.description)}), 429
+
+
+# Apply rate limits to the admin login endpoint. 5 attempts per minute plus
+# 30 per hour per IP stops online brute force without impacting legitimate
+# users. Combined with per-account lockout in admin.database this gives
+# defence in depth. ``exempt_when`` skips rate limiting in dev mode.
+_login_limits = os.environ.get('ADMIN_LOGIN_RATE_LIMIT', '5 per minute;30 per hour')
+limiter.limit(
+    _login_limits,
+    methods=['POST'],
+    exempt_when=lambda: _DEV_MODE,
+)(app.view_functions['admin.login_post'])
 
 # Initialise admin tables and seed admin user on startup
 adb.init_admin_tables()
@@ -62,6 +111,18 @@ DEV_MODE = os.environ.get('DEV_MODE', 'false').lower() == 'true'
 # Apply reverse proxy configuration based on environment
 script_name = '/app-tracker-dev' if DEV_MODE else '/app-tracker'
 app.wsgi_app = ReverseProxied(app.wsgi_app, script_name=script_name)
+
+# Trust X-Forwarded-* headers from the reverse proxy (nginx) so that
+# Flask-Limiter and request.remote_addr see the real client IP instead of
+# 127.0.0.1. Number of trusted proxies is configurable via env var.
+_proxy_hops = int(os.environ.get('TRUSTED_PROXY_COUNT', '1'))
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=_proxy_hops,
+    x_proto=_proxy_hops,
+    x_host=_proxy_hops,
+    x_prefix=_proxy_hops,
+)
 
 DB_PATH = os.environ.get('DB_PATH', 'microsoft_apps_versions.db')
 

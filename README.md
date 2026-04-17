@@ -113,6 +113,10 @@ in the shell before `docker compose up` — useful in CI.
 | `DEV_MODE` | No | `true` mounts under `/app-tracker-dev` and disables the scheduler. Default `false` |
 | `DB_PATH` | No | SQLite path for version DB. Default `/data/microsoft_apps_versions.db` inside the container |
 | `SUBSCRIPTION_DB_PATH` | No | SQLite path for subscriptions DB. Default `/data/subscriptions.db` |
+| `ADMIN_LOGIN_RATE_LIMIT` | No | Flask-Limiter string for `/admin/login`. Default `5 per minute;30 per hour` |
+| `ADMIN_MAX_FAILED_ATTEMPTS` | No | Failed logins before account lockout. Default `10` |
+| `ADMIN_LOCKOUT_MINUTES` | No | Lockout duration after hitting the threshold. Default `15` |
+| `TRUSTED_PROXY_COUNT` | No | Reverse proxy hops to trust for `X-Forwarded-For`. Default `1` |
 
 #### Email provider (choose one)
 
@@ -195,6 +199,33 @@ Navigate to `/admin` and log in with the credentials set via `ADMIN_PASSWORD`.
 - **Apps** -- add, edit, enable/disable, and delete tracked apps
 - **Email** -- select provider (M365 / Resend), enter credentials, send test emails
 - **Logs** -- filterable activity log
+
+### Login security
+
+The admin login has several brute-force mitigations baked in:
+
+- **IP rate limiting** on `POST /admin/login` via Flask-Limiter
+  (default `5 per minute;30 per hour`, configurable with
+  `ADMIN_LOGIN_RATE_LIMIT`).
+- **Per-account lockout**: after `ADMIN_MAX_FAILED_ATTEMPTS` consecutive
+  failures (default 10) the account is locked for `ADMIN_LOCKOUT_MINUTES`
+  (default 15). Any successful login clears the counter.
+- **Unknown usernames are silently ignored** for lockout accounting so
+  attackers cannot enumerate which admin usernames exist.
+- **Startup refuses to boot** if `FLASK_SECRET_KEY` or `ADMIN_JWT_SECRET`
+  are left at their placeholder values (unless `DEV_MODE=true`).
+- **Real client IP** is taken from `X-Forwarded-For` via
+  `werkzeug.middleware.proxy_fix.ProxyFix`; set `TRUSTED_PROXY_COUNT` to
+  match the number of reverse proxies in front of the container (1 for
+  plain nginx, 2 if you are also behind Cloudflare).
+- **All attempts** — success, failure, lockout hits — are written to the
+  admin activity log visible at `/admin/logs`.
+- Session cookies are `httponly`, `secure`, `SameSite=Lax`; JWT expires
+  after 8 hours.
+
+If you want an additional layer, add nginx-level rate limiting (see the
+commented `limit_req_zone` block in [`nginx/app-tracker.conf`](nginx/app-tracker.conf))
+or put a WAF such as Cloudflare in front of the site.
 
 ## CLI Usage
 

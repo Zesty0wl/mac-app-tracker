@@ -10,12 +10,16 @@ import sqlite3
 import hashlib
 import secrets
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 
 DB_PATH = os.environ.get('DB_PATH', '/data/microsoft_apps_versions.db')
+
+# Account lockout configuration
+MAX_FAILED_ATTEMPTS = int(os.environ.get('ADMIN_MAX_FAILED_ATTEMPTS', '10'))
+LOCKOUT_MINUTES = int(os.environ.get('ADMIN_LOCKOUT_MINUTES', '15'))
 
 
 def _get_conn():
@@ -49,6 +53,13 @@ def init_admin_tables():
             last_login  TEXT
         )
     """)
+
+    # Migration: add lockout columns if missing
+    existing_cols = {row[1] for row in cur.execute("PRAGMA table_info(admin_users)").fetchall()}
+    if 'failed_attempts' not in existing_cols:
+        cur.execute("ALTER TABLE admin_users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0")
+    if 'locked_until' not in existing_cols:
+        cur.execute("ALTER TABLE admin_users ADD COLUMN locked_until TEXT")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tracked_apps (
@@ -198,6 +209,71 @@ def verify_admin(username: str, password: str) -> bool:
     if not row:
         return False
     return _hash_password(password, row['salt']) == row['password']
+
+
+def get_lockout_status(username: str) -> Tuple[bool, int]:
+    """Return (is_locked, seconds_remaining). If no such user, returns (False, 0)
+    so callers don't leak whether the account exists."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT locked_until FROM admin_users WHERE username = ?", (username,)
+    ).fetchone()
+    conn.close()
+    if not row or not row['locked_until']:
+        return (False, 0)
+    try:
+        until = datetime.fromisoformat(row['locked_until'])
+    except (ValueError, TypeError):
+        return (False, 0)
+    remaining = (until - datetime.utcnow()).total_seconds()
+    if remaining <= 0:
+        return (False, 0)
+    return (True, int(remaining))
+
+
+def record_failed_login(username: str) -> Tuple[int, Optional[int]]:
+    """Increment the failed-login counter for ``username`` and lock the account
+    if it reaches ``MAX_FAILED_ATTEMPTS``.
+
+    Returns (attempts, lockout_seconds_remaining_or_None). Unknown usernames
+    are silently ignored (returns (0, None)) so timing doesn't reveal whether
+    the account exists.
+    """
+    conn = _get_conn()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT failed_attempts FROM admin_users WHERE username = ?", (username,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return (0, None)
+
+    attempts = (row['failed_attempts'] or 0) + 1
+    locked_until_iso = None
+    lockout_seconds = None
+    if attempts >= MAX_FAILED_ATTEMPTS:
+        locked_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
+        locked_until_iso = locked_until.isoformat()
+        lockout_seconds = LOCKOUT_MINUTES * 60
+
+    cur.execute(
+        "UPDATE admin_users SET failed_attempts = ?, locked_until = ? WHERE username = ?",
+        (attempts, locked_until_iso, username),
+    )
+    conn.commit()
+    conn.close()
+    return (attempts, lockout_seconds)
+
+
+def reset_failed_login(username: str) -> None:
+    """Clear failed-login counter and lockout after a successful authentication."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE admin_users SET failed_attempts = 0, locked_until = NULL WHERE username = ?",
+        (username,),
+    )
+    conn.commit()
+    conn.close()
 
 
 def update_last_login(username: str):

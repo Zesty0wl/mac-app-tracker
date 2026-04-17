@@ -1,5 +1,6 @@
 # Core application dependencies
 flask
+flask-limiter
 gunicorn
 PyJWT
 
