@@ -249,9 +249,38 @@ or put a WAF such as Cloudflare in front of the site.
 
 ## CLI Usage
 
+The CLI reads the same SQLite database and app catalogue as the web
+app, so it needs access to `/data/microsoft_apps_versions.db` and the
+system extraction tools (`7z`, `cpio`, `xar`). The easiest way to run
+it is **inside the running container** so you inherit all of that
+plus the same `.env`:
+
 ```bash
-# Analyze a specific app
-python3 download_and_analyze.py companyportal
+# One-off commands (container must be up)
+docker compose exec app python3 download_and_analyze.py --list-apps
+docker compose exec app python3 download_and_analyze.py companyportal
+docker compose exec app python3 download_and_analyze.py all
+docker compose exec app python3 download_and_analyze.py --show-history
+docker compose exec app python3 download_and_analyze.py --export-json /data/export.json
+docker compose exec app python3 download_and_analyze.py all --keep-downloads
+
+# Drop into a shell in the container for interactive use
+docker compose exec app bash
+```
+
+Files written to `/data/` inside the container are persisted on the
+host via the `./data` volume mount, so `--export-json /data/export.json`
+appears at `./data/export.json` on the host.
+
+If you have followed the [Manual Installation](#manual-installation)
+steps (system deps + venv + `DB_PATH`), you can also run the CLI
+directly on the host without the `docker compose exec` prefix.
+
+### Available commands
+
+```bash
+# Analyze a specific app by its app_id
+python3 download_and_analyze.py <app_id>
 
 # Analyze all configured apps
 python3 download_and_analyze.py all
@@ -262,10 +291,10 @@ python3 download_and_analyze.py --show-history
 # List available apps
 python3 download_and_analyze.py --list-apps
 
-# Export to JSON
+# Export all versions to JSON
 python3 download_and_analyze.py --export-json output.json
 
-# Keep downloaded files (deleted by default)
+# Keep downloaded installers instead of deleting them after analysis
 python3 download_and_analyze.py all --keep-downloads
 ```
 
