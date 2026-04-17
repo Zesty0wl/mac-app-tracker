@@ -309,11 +309,12 @@ Cloudflare (DNS + TLS)  ->  nginx reverse proxy  ->  Docker container (127.0.0.1
 ### 1. Prepare the server
 
 On a fresh Linux host with Docker + Docker Compose v2 and nginx
-installed:
+installed, clone the repo wherever you keep services on that host
+(e.g. under `/srv`, `/opt`, or your home directory):
 
 ```bash
-git clone https://github.com/Zesty0wl/mac-app-tracker.git /opt/app-tracker
-cd /opt/app-tracker
+git clone https://github.com/Zesty0wl/mac-app-tracker.git
+cd mac-app-tracker
 cp .env.template .env
 ```
 
@@ -395,8 +396,9 @@ curl -sI https://yourdomain.com/app-tracker/       # expect HTTP/2 200
 
 ### 7. Updating
 
+From the directory you cloned the repo into:
+
 ```bash
-cd /opt/app-tracker
 git pull
 GIT_SHA=$(git rev-parse --short HEAD) docker compose build
 docker compose up -d --force-recreate
