@@ -3,7 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ site_name }}</title>
+    <title>{{ seo_page_title or site_name }}</title>
+    {% if seo_description %}
+    <meta name="description" content="{{ seo_description }}">
+    {% endif %}
+    {% if seo_canonical_url %}
+    <link rel="canonical" href="{{ seo_canonical_url }}">
+    {% endif %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": {{ site_name|tojson }},
+      {% if seo_canonical_url %}"url": {{ seo_canonical_url|tojson }},{% endif %}
+      "description": {{ (seo_description or site_name)|tojson }},
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS"
+    }
+    </script>
     {% if dev_mode %}
     <meta name="robots" content="noindex, nofollow">
     {% endif %}
@@ -176,6 +193,46 @@
             border-radius: 18px;
             padding: 2rem;
             margin-bottom: 2rem;
+            border: 1px solid var(--border);
+        }
+
+        .seo-intro {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 1.75rem 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .seo-intro p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .seo-intro__heading {
+            margin: 1.25rem 0 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--text-primary);
+        }
+
+        .seo-intro__app-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1rem;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .seo-intro__app-list li {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.625rem;
+            border-radius: 999px;
             border: 1px solid var(--border);
         }
 
@@ -811,6 +868,22 @@
                 <span class="last-check-badge">Last check: <span id="last-check">-</span></span>
             </div>
         </header>
+
+        <section class="seo-intro" aria-label="About this tracker">
+            {% if seo_intro_html %}
+                {{ seo_intro_html|safe }}
+            {% else %}
+                <p>This tool tracks the latest release versions of key macOS applications used in enterprise environments managed via Microsoft Intune. Monitored apps include Microsoft Defender for Endpoint, Intune Company Portal, Microsoft Edge, and other apps commonly deployed via MDM. Data is sourced from official Microsoft CDN endpoints and installer manifests.</p>
+            {% endif %}
+            {% if tracked_app_names %}
+            <h2 class="seo-intro__heading">Tracked applications</h2>
+            <ul class="seo-intro__app-list">
+                {% for app_name in tracked_app_names %}
+                <li>{{ app_name }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </section>
 
         <div class="app-selector">
             <h2>Select Application</h2>

@@ -243,10 +243,25 @@ _DEFAULT_SOURCE_URL = 'https://github.com/Zesty0wl/mac-app-tracker'
 def inject_branding():
     site_name = os.environ.get('SITE_NAME', 'Mac Apps Version Tracker')
     brand_name = os.environ.get('BRAND_NAME', '') or site_name
+    seo_page_title = os.environ.get('SEO_PAGE_TITLE', '') or site_name
+    seo_description = os.environ.get(
+        'SEO_DESCRIPTION',
+        'Real-time version tracking for macOS applications used in '
+        'Microsoft Intune-managed environments.'
+    )
+    seo_intro_html = os.environ.get(
+        'SEO_INTRO_HTML',
+        ''
+    )
+    seo_canonical_url = os.environ.get('SEO_CANONICAL_URL', '')
     return {
         'site_name': site_name,
         'brand_name': brand_name,
         'brand_url': os.environ.get('BRAND_URL', '/'),
+        'seo_page_title': seo_page_title,
+        'seo_description': seo_description,
+        'seo_intro_html': seo_intro_html,
+        'seo_canonical_url': seo_canonical_url,
         'nav_links': _parse_json_env('NAV_LINKS_JSON', _DEFAULT_NAV_LINKS),
         'footer_logo_url': os.environ.get('FOOTER_LOGO_URL', ''),
         'footer_logo_alt': os.environ.get('FOOTER_LOGO_ALT', ''),
@@ -290,7 +305,22 @@ def get_display_name(package_identifier: str) -> str:
 def index():
     """Serve the main page"""
     dev_mode = DEV_MODE
-    return render_template('index.html', dev_mode=dev_mode)
+    # Build a static, server-rendered list of tracked app names so the
+    # content is indexable by search engines that don't execute JS.
+    try:
+        apps_cfg = load_apps_config()
+        tracked_app_names = sorted({
+            (meta.get('name') or '').strip()
+            for meta in apps_cfg.values()
+            if meta.get('name')
+        })
+    except Exception:
+        tracked_app_names = []
+    return render_template(
+        'index.html',
+        dev_mode=dev_mode,
+        tracked_app_names=tracked_app_names,
+    )
 
 @app.route('/api/apps')
 def get_apps():
