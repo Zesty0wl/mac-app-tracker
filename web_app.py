@@ -7,7 +7,7 @@ the subscription pages for email sign-up, and the JSON API consumed
 by automation scripts.
 """
 
-from flask import Flask, jsonify, render_template, send_from_directory, request, redirect, url_for
+from flask import Flask, Response, jsonify, render_template, send_from_directory, request, redirect, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from jinja2 import ChoiceLoader, FileSystemLoader
@@ -743,6 +743,122 @@ def get_subscription_stats():
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def _xml_escape(value: str) -> str:
+    """Escape characters that aren't safe inside XML text/attribute values."""
+    return (
+        value.replace('&', '&amp;')
+             .replace('<', '&lt;')
+             .replace('>', '&gt;')
+             .replace('"', '&quot;')
+             .replace("'", '&apos;')
+    )
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    """Dynamic sitemap.xml advertising public, indexable URLs.
+
+    Includes the homepage, the subscribe page, and a deep link per
+    tracked application (the SPA reads ``?app=<identifier>`` and renders
+    that app's history). ``lastmod`` for app deep links is the most
+    recent ``first_detected`` timestamp for that package; for the
+    homepage it is the most recent timestamp across all packages.
+    """
+    # ``base_url`` (module-level) is ``{site_url}{script_name}`` and
+    # therefore already includes the ``/app-tracker`` prefix that nginx
+    # strips before proxying. Use it directly so the URLs we publish are
+    # the public URLs visitors and crawlers actually hit.
+    root = base_url.rstrip('/')
+
+    latest_overall = None
+    app_entries = []
+    try:
+        with VersionDatabase(DB_PATH) as db:
+            cursor = db.conn.cursor()
+            cursor.execute("""
+                SELECT
+                    package_identifier,
+                    MAX(first_detected) AS lastmod
+                FROM versions
+                WHERE package_identifier NOT IN ('__manifest_cache__', '__last_check__')
+                GROUP BY package_identifier
+            """)
+            for row in cursor.fetchall():
+                identifier = row['package_identifier']
+                lastmod = row['lastmod']
+                if lastmod and (latest_overall is None or lastmod > latest_overall):
+                    latest_overall = lastmod
+                app_entries.append((identifier, lastmod))
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to build sitemap app entries")
+
+    # Sort deterministically so the sitemap is stable between requests.
+    app_entries.sort(key=lambda r: r[0])
+
+    def _format_lastmod(value):
+        """Normalise SQLite timestamps to a strict W3C datetime in UTC.
+
+        Google's sitemap parser rejects fractional seconds and requires
+        an explicit timezone. SQLite stores ``first_detected`` as
+        ``YYYY-MM-DD HH:MM:SS[.ffffff]`` (no tz), so we drop any
+        fractional component and append ``Z``.
+        """
+        if not value:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        # Split off fractional seconds if present.
+        text = text.split('.', 1)[0]
+        # Normalise the date/time separator.
+        text = text.replace(' ', 'T')
+        # Strip any pre-existing trailing Z so we don't double it up.
+        if text.endswith('Z'):
+            text = text[:-1]
+        return f'{text}Z'
+
+    urls = []
+    home_lastmod = _format_lastmod(latest_overall)
+    urls.append({
+        'loc': f'{root}/',
+        'lastmod': home_lastmod,
+        'changefreq': 'hourly',
+        'priority': '1.0',
+    })
+    # Subscribe page content changes whenever an app is added/removed
+    # from the tracker, so the latest overall ``first_detected`` is a
+    # reasonable proxy for its lastmod.
+    urls.append({
+        'loc': f'{root}/subscribe',
+        'lastmod': home_lastmod,
+        'changefreq': 'monthly',
+        'priority': '0.5',
+    })
+    for identifier, lastmod in app_entries:
+        urls.append({
+            'loc': f'{root}/?app={_xml_escape(identifier)}',
+            'lastmod': _format_lastmod(lastmod),
+            'changefreq': 'daily',
+            'priority': '0.8',
+        })
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for entry in urls:
+        lines.append('  <url>')
+        lines.append(f'    <loc>{_xml_escape(entry["loc"])}</loc>')
+        if entry['lastmod']:
+            lines.append(f'    <lastmod>{entry["lastmod"]}</lastmod>')
+        lines.append(f'    <changefreq>{entry["changefreq"]}</changefreq>')
+        lines.append(f'    <priority>{entry["priority"]}</priority>')
+        lines.append('  </url>')
+    lines.append('</urlset>')
+
+    body = '\n'.join(lines) + '\n'
+    return Response(body, mimetype='application/xml')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
