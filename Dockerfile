@@ -24,6 +24,7 @@ COPY static/ static/
 COPY tracker/ tracker/
 COPY admin/ admin/
 COPY notifications/ notifications/
+COPY suggestions/ suggestions/
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

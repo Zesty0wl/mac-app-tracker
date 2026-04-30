@@ -112,8 +112,11 @@ def analyze_with_notifications(app_id, app_info, db_path, keep_downloads=False):
             # Only send notification if version actually changed
             if previous_version and previous_version != new_version:
                 print(f"🔄 Version change detected: {previous_version} → {new_version}")
-                print("📧 Sending notifications to subscribers...")
                 add_log('INFO', 'tracker', f"Version change detected for {app_info['name']}: {previous_version} → {new_version}")
+
+                release_notes_url = app_info.get('release_notes_url', '')
+
+                print("📧 Sending notifications to subscribers...")
                 
                 try:
                     # Convert Row to dict for easier handling
@@ -128,7 +131,8 @@ def analyze_with_notifications(app_id, app_info, db_path, keep_downloads=False):
                         'bundle_id': version_row_dict.get('bundle_id'),
                         'num_files': version_row_dict.get('num_files'),
                         'install_kb': version_row_dict.get('install_kb'),
-                        'components': components
+                        'components': components,
+                        'release_notes_url': release_notes_url,
                     }
                     
                     notification_result = subscription_manager.send_version_notification(

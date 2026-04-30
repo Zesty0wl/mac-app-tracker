@@ -17,6 +17,7 @@ from notifications.manager import SubscriptionManager
 from tracker.config import load_apps_config, build_identifier_lookup
 import admin.database as adb
 from admin import admin_bp
+from suggestions import database as sdb
 import os
 import json
 import logging
@@ -133,6 +134,9 @@ adb.init_admin_tables()
 _admin_pw = os.environ.get('ADMIN_PASSWORD', '')
 if _admin_pw:
     adb.create_admin_user('admin', _admin_pw)
+
+# Initialise community-suggestion tables
+sdb.init_tables()
 
 # Configure Flask for reverse proxy with /app-tracker prefix
 class ReverseProxied:
@@ -279,6 +283,7 @@ def inject_branding():
         ),
         'footer_links': _parse_json_env('FOOTER_LINKS_JSON', [
             {'label': 'Notifications', 'href': '/subscribe'},
+            {'label': 'Suggest Apps', 'href': '/suggest'},
             {'label': 'JSON API', 'href': '/api/latest', 'target': '_blank'},
         ]),
         'source_url': os.environ.get('SOURCE_URL', _DEFAULT_SOURCE_URL),
@@ -339,9 +344,19 @@ def get_apps():
             GROUP BY package_identifier
             ORDER BY package_identifier
         """)
+        version_rows = cursor.fetchall()
         
+        # Build lookup of release_notes_url from tracked_apps
+        rn_urls = {}
+        try:
+            cursor.execute("SELECT identifier, release_notes_url FROM tracked_apps WHERE release_notes_url != ''")
+            for rn_row in cursor.fetchall():
+                rn_urls[rn_row['identifier']] = rn_row['release_notes_url']
+        except Exception:
+            pass
+
         apps = []
-        for row in cursor.fetchall():
+        for row in version_rows:
             identifier = row['package_identifier']
             friendly_name = get_display_name(identifier)
             
@@ -349,7 +364,8 @@ def get_apps():
                 'id': identifier,
                 'name': friendly_name,
                 'last_checked': row['last_checked'],
-                'download_url': row['download_url']
+                'download_url': row['download_url'],
+                'release_notes_url': rn_urls.get(identifier, ''),
             })
         
         # Sort alphabetically by name
@@ -403,7 +419,7 @@ def get_app_versions(app_id):
                 'num_files': row['num_files'],
                 'install_kb': row['install_kb'],
                 'last_modified': row['last_modified'],
-                'etag': row['etag']
+                'etag': row['etag'],
             }
             
             # Get components for this version (excluding version "0" components)
@@ -745,6 +761,134 @@ def get_subscription_stats():
         return jsonify({'error': str(e)}), 500
 
 
+# ---------------------------------------------------------------------------
+# App suggestions (community-recommended apps to track)
+# ---------------------------------------------------------------------------
+
+def _client_voter_hash() -> str:
+    """Return a stable per-(IP, UA) voter fingerprint for the current request."""
+    ip = (request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+          or request.remote_addr or '')
+    ua = request.headers.get('User-Agent', '')
+    return sdb.voter_hash(ip, ua)
+
+
+@app.route('/suggest')
+def suggest_page():
+    """Public page combining the suggestion form and the voting list."""
+    return render_template(
+        'suggest.html',
+        approval_threshold=sdb.get_approval_threshold(),
+    )
+
+
+@app.route('/api/suggestions', methods=['GET'])
+def api_list_suggestions():
+    items = sdb.list_suggestions_public()
+    voted = set(sdb.voted_ids_for(_client_voter_hash()))
+    out = []
+    for item in items:
+        out.append({
+            'id': item['id'],
+            'name': item['name'],
+            'identifier': item['identifier'],
+            'download_url': item['download_url'],
+            'release_notes_url': item.get('release_notes_url', ''),
+            'description': item['description'],
+            'status': item['status'],
+            'votes': item['votes_count'],
+            'created_at': item['created_at'],
+            'has_voted': item['id'] in voted,
+        })
+    return jsonify({
+        'suggestions': out,
+        'approval_threshold': sdb.get_approval_threshold(),
+    })
+
+
+@app.route('/api/suggestions', methods=['POST'])
+@limiter.limit('5 per hour;30 per day', exempt_when=lambda: _DEV_MODE)
+def api_submit_suggestion():
+    """Accept a public submission. Rate-limited per IP."""
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    if len(name) > 200:
+        return jsonify({'error': 'Name is too long (max 200 chars)'}), 400
+
+    identifier = (data.get('identifier') or '').strip()[:300]
+    download_url = (data.get('download_url') or '').strip()[:1000]
+    release_notes_url = (data.get('release_notes_url') or '').strip()[:1000]
+    description = (data.get('description') or '').strip()[:2000]
+    submitter_email = (data.get('submitter_email') or '').strip()[:320]
+
+    if download_url and not (
+        download_url.startswith('http://') or download_url.startswith('https://')
+    ):
+        return jsonify({'error': 'Download URL must start with http:// or https://'}), 400
+    if release_notes_url and not (
+        release_notes_url.startswith('http://') or release_notes_url.startswith('https://')
+    ):
+        return jsonify({'error': 'Release notes URL must start with http:// or https://'}), 400
+
+    # Honeypot field - bots typically fill every input. If present, accept
+    # silently so the bot thinks it succeeded.
+    if (data.get('website') or '').strip():
+        return jsonify({'ok': True}), 201
+
+    # Reject suggestions for apps we already track. Bundle identifier is
+    # the most reliable key; fall back to a case-insensitive name match
+    # when no identifier was supplied.
+    if identifier and adb.get_tracked_app_by_identifier(identifier):
+        return jsonify({
+            'error': f'"{identifier}" is already in the tracker.'
+        }), 409
+    if not identifier:
+        for app in adb.list_tracked_apps(include_disabled=True):
+            if (app.get('name') or '').strip().lower() == name.lower():
+                return jsonify({
+                    'error': f'"{name}" is already in the tracker.'
+                }), 409
+
+    sid = sdb.add_suggestion(
+        {
+            'name': name,
+            'identifier': identifier,
+            'download_url': download_url,
+            'release_notes_url': release_notes_url,
+            'description': description,
+            'submitter_email': submitter_email,
+        },
+        submitter_hash=_client_voter_hash(),
+    )
+    if sid is None:
+        return jsonify({'error': 'A suggestion with that name or identifier already exists'}), 409
+
+    # New suggestions start as 'pending' and cannot be voted on until an
+    # admin approves them, so we don't auto-cast a vote here.
+    adb.add_log('INFO', 'suggestions', f'New app suggestion: {name} (#{sid})')
+    return jsonify({'ok': True, 'id': sid}), 201
+
+
+@app.route('/api/suggestions/<int:sid>/vote', methods=['POST'])
+@limiter.limit('30 per hour;120 per day', exempt_when=lambda: _DEV_MODE)
+def api_vote_suggestion(sid: int):
+    """Cast a vote for a suggestion. One vote per (IP, UA) fingerprint.
+
+    Only suggestions an admin has approved can collect votes.
+    """
+    fingerprint = _client_voter_hash()
+    suggestion = sdb.get_suggestion(sid)
+    if not suggestion:
+        return jsonify({'error': 'Suggestion not found'}), 404
+    if suggestion['status'] != 'approved':
+        return jsonify({'error': 'This suggestion is awaiting moderation and is not open for voting yet.'}), 403
+    created, count = sdb.add_vote(sid, fingerprint)
+    return jsonify({'ok': True, 'votes': count, 'already_voted': not created})
+
+
 def _xml_escape(value: str) -> str:
     """Escape characters that aren't safe inside XML text/attribute values."""
     return (
@@ -834,6 +978,12 @@ def sitemap_xml():
         'loc': f'{root}/subscribe',
         'lastmod': home_lastmod,
         'changefreq': 'monthly',
+        'priority': '0.5',
+    })
+    urls.append({
+        'loc': f'{root}/suggest',
+        'lastmod': home_lastmod,
+        'changefreq': 'weekly',
         'priority': '0.5',
     })
     for identifier, lastmod in app_entries:

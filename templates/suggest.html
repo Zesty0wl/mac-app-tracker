@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suggest an App to Track — {{ site_name }}</title>
+    <meta name="description" content="Suggest a new macOS application for {{ site_name }} to track and vote on community-submitted ideas.">
+    {% if plausible_domain and plausible_script_url %}
+    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --bg-secondary: #f3f4f6;
+            --bg-card: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --nav-bg: #ffffff;
+            --nav-border: #e5e7eb;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.47;
+            -webkit-font-smoothing: antialiased;
+        }
+        nav { background: var(--nav-bg); position: sticky; top: 0; z-index: 1000;
+              box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); border-bottom: 1px solid var(--nav-border); }
+        .nav-content { max-width: 1280px; margin: 0 auto; padding: 0 1rem;
+                       display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .nav-brand { color: var(--text-primary); font-size: 1.25rem; font-weight: 700;
+                     text-decoration: none; letter-spacing: -0.01em; }
+        .nav-links { display: flex; gap: 0.5rem; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none;
+                       font-size: 0.875rem; font-weight: 500; padding: 0.5rem 0.75rem;
+                       border-radius: 0.5rem; transition: all 0.2s; }
+        .nav-links a:hover, .nav-links a.active { color: var(--primary); background: var(--bg-secondary); }
+        .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+        .header { margin-bottom: 2rem; }
+        .header h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 0.75rem; }
+        .header .subtitle { color: var(--text-secondary); font-size: 1.125rem; }
+        .threshold-note { display: inline-block; margin-top: 0.75rem; padding: 0.4rem 0.75rem;
+                          background: #eef2ff; color: #4338ca; border-radius: 9999px;
+                          font-size: 0.85rem; font-weight: 500; }
+
+        .card { background: var(--bg-card); border-radius: 18px; padding: 2rem;
+                border: 1px solid var(--border); margin-bottom: 2rem; }
+        .card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
+        .card .lede { color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.25rem; }
+        .form-grid .full { grid-column: 1 / -1; }
+        @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+
+        label { display: block; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.4rem; }
+        label .req { color: var(--error); margin-left: 0.15rem; }
+        .hint { display: block; font-weight: 400; color: var(--text-secondary); font-size: 0.8rem; margin-top: 0.2rem; }
+        input[type="text"], input[type="email"], input[type="url"], textarea {
+            width: 100%; padding: 0.7rem 0.85rem; border: 1px solid var(--border);
+            background: white; border-radius: 0.6rem; font-size: 0.95rem;
+            color: var(--text-primary); font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        input:focus, textarea:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+        textarea { min-height: 90px; resize: vertical; }
+        /* Honeypot field - hidden from real users */
+        .hp-field { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+        .btn { display: inline-flex; align-items: center; gap: 0.4rem;
+               padding: 0.7rem 1.25rem; border-radius: 0.6rem; font-size: 0.95rem;
+               font-weight: 600; border: none; cursor: pointer; transition: all 0.15s;
+               text-decoration: none; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--bg-secondary); color: var(--text-primary);
+                         border: 1px solid var(--border); }
+        .btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
+        .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .form-actions { margin-top: 1.5rem; }
+        .form-msg { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 0.5rem;
+                    font-size: 0.9rem; display: none; }
+        .form-msg.success { background: #d1fae5; color: #065f46; display: block; }
+        .form-msg.error { background: #fee2e2; color: #991b1b; display: block; }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 0.85rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+        th { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);
+             text-transform: uppercase; letter-spacing: 0.04em; background: #fafafa; }
+        tr:last-child td { border-bottom: none; }
+
+        .vote-cell { white-space: nowrap; text-align: center; }
+        .vote-btn { display: inline-flex; align-items: center; gap: 0.35rem;
+                    padding: 0.45rem 0.75rem; border-radius: 9999px;
+                    background: white; border: 1px solid var(--border);
+                    cursor: pointer; font-weight: 600; font-size: 0.85rem;
+                    color: var(--text-primary); transition: all 0.15s; }
+        .vote-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
+        .vote-btn:disabled { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; cursor: default; }
+        .vote-btn .arrow { font-size: 1rem; line-height: 1; }
+        .vote-count { font-variant-numeric: tabular-nums; min-width: 1.5ch; display: inline-block; text-align: center; }
+
+        .progress-wrap { margin-top: 0.4rem; height: 4px; background: var(--bg-secondary);
+                         border-radius: 9999px; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--primary); transition: width 0.3s; }
+        .progress-bar.ready { background: var(--success); }
+
+        .name-cell { font-weight: 600; color: var(--text-primary); }
+        .desc-cell { color: var(--text-secondary); font-size: 0.85rem; max-width: 480px; }
+        .meta-line { color: var(--text-secondary); font-size: 0.78rem; margin-top: 0.25rem;
+                     word-break: break-all; }
+        .meta-line a { color: var(--primary); text-decoration: none; }
+        .meta-line a:hover { text-decoration: underline; }
+        .badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 9999px;
+                 font-size: 0.7rem; font-weight: 600; margin-left: 0.4rem; vertical-align: middle; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-approved { background: #d1fae5; color: #065f46; }
+
+        .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary); }
+        .filter-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        .filter-bar input { max-width: 320px; flex: 1 1 220px; }
+        .filter-bar .count { color: var(--text-secondary); font-size: 0.875rem; margin-left: auto; }
+
+        .section-head { display: flex; align-items: center; justify-content: space-between;
+                        gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+        .section-head h2 { margin-bottom: 0; }
+
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+            display: none; align-items: flex-start; justify-content: center;
+            padding: 2rem 1rem; z-index: 2000; overflow-y: auto;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: var(--bg-card); border-radius: 18px;
+            width: min(720px, 100%); padding: 2rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25); position: relative;
+        }
+        .modal-head { display: flex; align-items: flex-start; justify-content: space-between;
+                      gap: 1rem; margin-bottom: 1rem; }
+        .modal-head h2 { font-size: 1.25rem; font-weight: 600; }
+        .modal-close {
+            background: transparent; border: none; cursor: pointer;
+            color: var(--text-secondary); font-size: 1.5rem; line-height: 1;
+            padding: 0.25rem 0.5rem; border-radius: 0.4rem;
+        }
+        .modal-close:hover { color: var(--text-primary); background: var(--bg-secondary); }
+        @media (max-width: 640px) {
+            .modal { padding: 1.25rem; border-radius: 14px; }
+            .modal-backdrop { padding: 0.75rem; }
+        }
+
+        tr.suggestion-row { cursor: pointer; }
+        tr.suggestion-row:hover { background: #f9fafb; }
+        tr.suggestion-row td { vertical-align: middle; }
+        td.identifier-cell { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                             font-size: 0.82rem; color: var(--text-secondary); word-break: break-all; }
+        .pending-row { opacity: 0.75; }
+
+        .details-grid { display: grid; gap: 0.9rem; }
+        .details-grid dt { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+                           text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem; }
+        .details-grid dd { font-size: 0.92rem; color: var(--text-primary); word-break: break-word; }
+        .details-grid dd a { color: var(--primary); text-decoration: none; }
+        .details-grid dd a:hover { text-decoration: underline; }
+        .details-grid code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                             font-size: 0.85rem; background: var(--bg-secondary);
+                             padding: 0.1rem 0.4rem; border-radius: 4px; }
+
+        .back-link { display: inline-block; margin-top: 1rem; color: var(--text-secondary);
+                     text-decoration: none; font-size: 0.9rem; }
+        .back-link:hover { color: var(--primary); }
+
+        @media (max-width: 640px) {
+            .container { padding: 1.25rem 0.75rem; }
+            .header h1 { font-size: 1.65rem; }
+            .card { padding: 1.25rem; border-radius: 14px; }
+            th, td { padding: 0.65rem 0.5rem; }
+            .desc-cell { max-width: 200px; }
+        }
+    </style>
+</head>
+<body>
+    {% include '_header.html' %}
+
+    <div class="container">
+        <div class="header">
+            <h1>Suggest an App to Track</h1>
+            <div class="subtitle">
+                Recommend a new macOS application for the tracker, or vote for ideas already submitted by the community.
+            </div>
+            <span class="threshold-note">Suggestions reaching <strong>{{ approval_threshold }} votes</strong> are reviewed for inclusion.</span>
+        </div>
+
+        <div class="card">
+            <div class="section-head">
+                <h2>Community Suggestions</h2>
+                <button type="button" class="btn btn-primary" id="open-suggest-modal">+ Suggest a New App</button>
+            </div>
+            <p class="lede">Click the upvote button on the apps you'd like to see added. One vote per browser.</p>
+            <div class="filter-bar">
+                <input type="text" id="filter-input" placeholder="Filter by name or identifier..." autocomplete="off">
+                <span class="count" id="result-count"></span>
+            </div>
+            <div class="table-wrap">
+                <table id="suggestions-table">
+                    <thead>
+                        <tr>
+                            <th>App</th>
+                            <th>Bundle ID</th>
+                            <th style="width: 140px; text-align: center;">Votes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suggestions-body">
+                        <tr><td colspan="3" class="empty-state">Loading suggestions...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <a href="{{ url_for('index') }}" class="back-link">&larr; Back to App Tracker</a>
+    </div>
+
+    <div class="modal-backdrop" id="suggest-modal" role="dialog" aria-modal="true" aria-labelledby="suggest-modal-title">
+        <div class="modal">
+            <div class="modal-head">
+                <h2 id="suggest-modal-title">Submit a New App</h2>
+                <button type="button" class="modal-close" id="close-suggest-modal" aria-label="Close">&times;</button>
+            </div>
+            <p class="lede">Tell us what you'd like tracked. The more info you can include the easier it is for us to wire it up.</p>
+            <form id="suggest-form" novalidate>
+                <div class="form-grid">
+                    <div>
+                        <label for="name">App name <span class="req">*</span></label>
+                        <input type="text" id="name" name="name" required maxlength="200" autocomplete="off" placeholder="e.g. Microsoft OneNote">
+                    </div>
+                    <div>
+                        <label for="identifier">Bundle / package identifier
+                            <span class="hint">Optional but very helpful (e.g. com.microsoft.onenote.mac).</span>
+                        </label>
+                        <input type="text" id="identifier" name="identifier" maxlength="300" autocomplete="off" placeholder="com.example.app">
+                    </div>
+                    <div class="full">
+                        <label for="download_url">Download URL
+                            <span class="hint">Direct link to the .pkg/.dmg installer or the vendor's "stable download" redirect.</span>
+                        </label>
+                        <input type="url" id="download_url" name="download_url" maxlength="1000" autocomplete="off" placeholder="https://...">
+                    </div>
+                    <div class="full">
+                        <label for="release_notes_url">Release notes URL
+                            <span class="hint">Optional. Link to the vendor's release notes / changelog page.</span>
+                        </label>
+                        <input type="url" id="release_notes_url" name="release_notes_url" maxlength="1000" autocomplete="off" placeholder="https://...">
+                    </div>
+                    <div class="full">
+                        <label for="description">Why should we track it?
+                            <span class="hint">A short note about who uses it and why versioning matters.</span>
+                        </label>
+                        <textarea id="description" name="description" maxlength="2000"></textarea>
+                    </div>
+                    <div class="full">
+                        <label for="submitter_email">Your email
+                            <span class="hint">Optional. We'll only use this to follow up if we have questions.</span>
+                        </label>
+                        <input type="email" id="submitter_email" name="submitter_email" maxlength="320" autocomplete="email" placeholder="you@example.com">
+                    </div>
+                    <div class="hp-field" aria-hidden="true">
+                        <label for="website">Leave this empty</label>
+                        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-actions" style="display:flex; gap:0.5rem; justify-content:flex-end;">
+                    <button type="button" class="btn btn-secondary" id="cancel-suggest-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Submit Suggestion</button>
+                </div>
+                <div class="form-msg" id="form-msg" role="status"></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="details-modal" role="dialog" aria-modal="true" aria-labelledby="details-modal-title">
+        <div class="modal">
+            <div class="modal-head">
+                <h2 id="details-modal-title">Suggestion details</h2>
+                <button type="button" class="modal-close" id="close-details-modal" aria-label="Close">&times;</button>
+            </div>
+            <dl class="details-grid" id="details-body"></dl>
+            <div class="form-actions" style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1.5rem;">
+                <button type="button" class="btn btn-secondary" id="details-close-btn">Close</button>
+                <button type="button" class="btn btn-primary" id="details-vote-btn">Upvote</button>
+            </div>
+        </div>
+    </div>
+
+    {% include '_footer.html' %}
+
+    <script>
+        (function () {
+            const basePath = window.location.pathname.replace(/\/suggest\/?$/, '') || '/';
+            const apiRoot = (basePath.endsWith('/') ? basePath.slice(0, -1) : basePath) + '/api/suggestions';
+            const STORAGE_KEY = 'suggested_apps_voted_v1';
+            const APPROVAL_THRESHOLD = {{ approval_threshold|int }};
+
+            const tbody = document.getElementById('suggestions-body');
+            const filterInput = document.getElementById('filter-input');
+            const resultCount = document.getElementById('result-count');
+            const form = document.getElementById('suggest-form');
+            const formMsg = document.getElementById('form-msg');
+            const submitBtn = document.getElementById('submit-btn');
+            const modal = document.getElementById('suggest-modal');
+            const openModalBtn = document.getElementById('open-suggest-modal');
+            const closeModalBtn = document.getElementById('close-suggest-modal');
+            const cancelModalBtn = document.getElementById('cancel-suggest-modal');
+
+            function openModal() {
+                formMsg.className = 'form-msg';
+                formMsg.textContent = '';
+                modal.classList.add('open');
+                document.body.style.overflow = 'hidden';
+                setTimeout(() => form.name.focus(), 50);
+            }
+            function closeModal() {
+                modal.classList.remove('open');
+                document.body.style.overflow = '';
+            }
+            openModalBtn.addEventListener('click', openModal);
+            closeModalBtn.addEventListener('click', closeModal);
+            cancelModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+            });
+
+            let allSuggestions = [];
+
+            function getVoted() {
+                try {
+                    return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+                } catch (e) { return new Set(); }
+            }
+            function markVoted(id) {
+                const voted = getVoted();
+                voted.add(id);
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...voted])); } catch (e) {}
+            }
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+            function escapeAttr(s) { return escapeHtml(s); }
+
+            function render() {
+                const voted = getVoted();
+                const filter = filterInput.value.trim().toLowerCase();
+                const filtered = allSuggestions.filter(s => {
+                    if (!filter) return true;
+                    return (s.name || '').toLowerCase().includes(filter)
+                        || (s.identifier || '').toLowerCase().includes(filter)
+                        || (s.description || '').toLowerCase().includes(filter);
+                });
+                resultCount.textContent = filtered.length === allSuggestions.length
+                    ? `${allSuggestions.length} suggestion${allSuggestions.length === 1 ? '' : 's'}`
+                    : `${filtered.length} of ${allSuggestions.length}`;
+
+                if (!filtered.length) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="empty-state">${
+                        allSuggestions.length ? 'No matches.' : 'No suggestions yet&mdash;be the first!'
+                    }</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = filtered.map(s => {
+                    const hasVoted = s.has_voted || voted.has(s.id);
+                    const pct = Math.min(100, Math.round((s.votes / APPROVAL_THRESHOLD) * 100));
+                    const ready = s.votes >= APPROVAL_THRESHOLD;
+                    const isPending = s.status !== 'approved';
+                    const pendingBadge = isPending
+                        ? ' <span class="badge badge-pending" title="Awaiting moderation; not open for voting yet">pending</span>'
+                        : '';
+                    const identifier = s.identifier
+                        ? escapeHtml(s.identifier)
+                        : '<span style="color: var(--text-secondary);">&mdash;</span>';
+                    const voteDisabled = hasVoted || isPending;
+                    const voteTitle = isPending
+                        ? 'Awaiting moderation'
+                        : (hasVoted ? 'You already voted' : 'Upvote this suggestion');
+                    const arrow = isPending ? '\u22EF' : (hasVoted ? '\u2713' : '\u25B2');
+                    return `
+                        <tr class="suggestion-row${isPending ? ' pending-row' : ''}" data-id="${s.id}">
+                            <td>
+                                <div class="name-cell">${escapeHtml(s.name)}${pendingBadge}</div>
+                            </td>
+                            <td class="identifier-cell">${identifier}</td>
+                            <td class="vote-cell">
+                                <button type="button" class="vote-btn" data-vote-id="${s.id}" ${voteDisabled ? 'disabled' : ''} title="${voteTitle}" aria-label="Upvote ${escapeAttr(s.name)}">
+                                    <span class="arrow">${arrow}</span>
+                                    <span class="vote-count" data-count="${s.id}">${s.votes}</span>
+                                </button>
+                                <div class="progress-wrap" title="${s.votes} of ${APPROVAL_THRESHOLD} votes">
+                                    <div class="progress-bar ${ready ? 'ready' : ''}" style="width: ${pct}%"></div>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+
+            async function loadSuggestions() {
+                try {
+                    const r = await fetch(apiRoot, { headers: { 'Accept': 'application/json' } });
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    const data = await r.json();
+                    allSuggestions = data.suggestions || [];
+                    render();
+                } catch (e) {
+                    tbody.innerHTML = `<tr><td colspan="2" class="empty-state">Couldn't load suggestions. Refresh to try again.</td></tr>`;
+                }
+            }
+
+            async function castVote(id, btn) {
+                btn.disabled = true;
+                try {
+                    const r = await fetch(`${apiRoot}/${id}/vote`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const data = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        btn.disabled = false;
+                        alert(data.error || 'Could not record your vote. Please try again.');
+                        return;
+                    }
+                    markVoted(id);
+                    // Update counts in our local list and re-render so the
+                    // progress bar / sort order reflect the new tally.
+                    const item = allSuggestions.find(s => s.id === id);
+                    if (item) {
+                        item.votes = data.votes;
+                        item.has_voted = true;
+                    }
+                    allSuggestions.sort((a, b) => b.votes - a.votes
+                        || new Date(a.created_at) - new Date(b.created_at));
+                    render();
+                } catch (e) {
+                    btn.disabled = false;
+                    alert('Network error. Please try again.');
+                }
+            }
+
+            tbody.addEventListener('click', (event) => {
+                const voteBtn = event.target.closest('.vote-btn');
+                if (voteBtn) {
+                    event.stopPropagation();
+                    if (voteBtn.disabled) return;
+                    const id = parseInt(voteBtn.dataset.voteId, 10);
+                    if (id) castVote(id, voteBtn);
+                    return;
+                }
+                const row = event.target.closest('tr.suggestion-row');
+                if (!row) return;
+                const id = parseInt(row.dataset.id, 10);
+                if (id) openDetails(id);
+            });
+
+            const detailsModal = document.getElementById('details-modal');
+            const detailsBody = document.getElementById('details-body');
+            const detailsVoteBtn = document.getElementById('details-vote-btn');
+            let detailsCurrentId = null;
+
+            function openDetails(id) {
+                const s = allSuggestions.find(x => x.id === id);
+                if (!s) return;
+                detailsCurrentId = id;
+                const voted = getVoted();
+                const hasVoted = s.has_voted || voted.has(s.id);
+                const isPending = s.status !== 'approved';
+                const submitted = s.created_at
+                    ? new Date(s.created_at + (s.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString()
+                    : '';
+                const url = s.download_url
+                    ? `<a href="${escapeAttr(s.download_url)}" target="_blank" rel="noopener nofollow">${escapeHtml(s.download_url)}</a>`
+                    : '<span style="color: var(--text-secondary);">Not provided</span>';
+                const notes = s.release_notes_url
+                    ? `<a href="${escapeAttr(s.release_notes_url)}" target="_blank" rel="noopener nofollow">${escapeHtml(s.release_notes_url)}</a>`
+                    : '<span style="color: var(--text-secondary);">Not provided</span>';
+                const ident = s.identifier
+                    ? `<code>${escapeHtml(s.identifier)}</code>`
+                    : '<span style="color: var(--text-secondary);">Not provided</span>';
+                const desc = s.description
+                    ? escapeHtml(s.description).replace(/\n/g, '<br>')
+                    : '<span style="color: var(--text-secondary);">No description provided</span>';
+                const statusLine = isPending
+                    ? '<span class="badge badge-pending">pending</span> Awaiting moderator approval before voting opens.'
+                    : `Open for voting (<strong>${s.votes}</strong> of ${APPROVAL_THRESHOLD} needed)`;
+                detailsBody.innerHTML = `
+                    <div><dt>App</dt><dd style="font-weight:600;">${escapeHtml(s.name)}</dd></div>
+                    <div><dt>Bundle / package identifier</dt><dd>${ident}</dd></div>
+                    <div><dt>Download URL</dt><dd>${url}</dd></div>
+                    <div><dt>Release notes URL</dt><dd>${notes}</dd></div>
+                    <div><dt>Why it should be tracked</dt><dd>${desc}</dd></div>
+                    <div><dt>Status</dt><dd>${statusLine}</dd></div>
+                    <div><dt>Submitted</dt><dd>${escapeHtml(submitted)}</dd></div>
+                `;
+                detailsVoteBtn.disabled = hasVoted || isPending;
+                detailsVoteBtn.textContent = isPending
+                    ? 'Awaiting approval'
+                    : (hasVoted ? `Voted (${s.votes})` : `Upvote (${s.votes})`);
+                detailsModal.classList.add('open');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeDetails() {
+                detailsModal.classList.remove('open');
+                document.body.style.overflow = '';
+                detailsCurrentId = null;
+            }
+
+            document.getElementById('close-details-modal').addEventListener('click', closeDetails);
+            document.getElementById('details-close-btn').addEventListener('click', closeDetails);
+            detailsModal.addEventListener('click', (e) => { if (e.target === detailsModal) closeDetails(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && detailsModal.classList.contains('open')) closeDetails();
+            });
+
+            detailsVoteBtn.addEventListener('click', async () => {
+                if (detailsCurrentId == null || detailsVoteBtn.disabled) return;
+                detailsVoteBtn.disabled = true;
+                await castVote(detailsCurrentId, detailsVoteBtn);
+                closeDetails();
+            });
+
+            filterInput.addEventListener('input', render);
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                formMsg.className = 'form-msg';
+                formMsg.textContent = '';
+                const payload = {
+                    name: form.name.value.trim(),
+                    identifier: form.identifier.value.trim(),
+                    download_url: form.download_url.value.trim(),
+                    release_notes_url: form.release_notes_url.value.trim(),
+                    description: form.description.value.trim(),
+                    submitter_email: form.submitter_email.value.trim(),
+                    website: form.website.value, // honeypot
+                };
+                if (!payload.name) {
+                    formMsg.className = 'form-msg error';
+                    formMsg.textContent = 'Please give the app a name.';
+                    return;
+                }
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+                try {
+                    const r = await fetch(apiRoot, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await r.json().catch(() => ({}));
+                    if (r.status === 201) {
+                        formMsg.className = 'form-msg success';
+                        formMsg.textContent = 'Thanks! Your suggestion has been submitted and will appear once a moderator approves it.';
+                        if (data.id) markVoted(data.id);
+                        form.reset();
+                        loadSuggestions();
+                        setTimeout(closeModal, 1500);
+                    } else if (r.status === 409) {
+                        formMsg.className = 'form-msg error';
+                        formMsg.textContent = data.error || 'A suggestion with that name already exists&mdash;upvote it below instead!';
+                    } else if (r.status === 429) {
+                        formMsg.className = 'form-msg error';
+                        formMsg.textContent = 'You have submitted too many suggestions recently. Please try again later.';
+                    } else {
+                        formMsg.className = 'form-msg error';
+                        formMsg.textContent = data.error || 'Something went wrong. Please try again.';
+                    }
+                } catch (e) {
+                    formMsg.className = 'form-msg error';
+                    formMsg.textContent = 'Network error. Please try again.';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Suggestion';
+                }
+            });
+
+            loadSuggestions();
+        })();
+    </script>
+</body>
+</html>

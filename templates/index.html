@@ -210,25 +210,66 @@
             line-height: 1.6;
         }
 
-        .seo-intro__heading {
-            margin: 1.25rem 0 0.75rem;
-            font-size: 1rem;
-            font-weight: 600;
-            letter-spacing: -0.01em;
-            color: var(--text-primary);
+        .tracked-apps-disclosure {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 0.25rem 1.25rem;
+            margin: 2rem 0 1rem;
+            border: 1px solid var(--border);
         }
 
-        .seo-intro__app-list {
+        .tracked-apps-disclosure summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 0.25rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
+        .tracked-apps-disclosure summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .tracked-apps-disclosure summary::before {
+            content: '';
+            width: 0;
+            height: 0;
+            border-left: 5px solid currentColor;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            transition: transform 0.15s ease;
+        }
+
+        .tracked-apps-disclosure[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .tracked-apps-disclosure__count {
+            margin-left: auto;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            padding: 0.125rem 0.5rem;
+            border-radius: 999px;
+        }
+
+        .tracked-apps-disclosure__list {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem 1rem;
             list-style: none;
-            padding: 0;
+            padding: 0 0 1rem;
             margin: 0;
         }
 
-        .seo-intro__app-list li {
-            font-size: 0.875rem;
+        .tracked-apps-disclosure__list li {
+            font-size: 0.8125rem;
             color: var(--text-secondary);
             background: var(--bg-secondary);
             padding: 0.25rem 0.625rem;
@@ -875,14 +916,6 @@
             {% else %}
                 <p>This tool tracks the latest release versions of key macOS applications used in enterprise environments managed via Microsoft Intune. Monitored apps include Microsoft Defender for Endpoint, Intune Company Portal, Microsoft Edge, and other apps commonly deployed via MDM. Data is sourced from official Microsoft CDN endpoints and installer manifests.</p>
             {% endif %}
-            {% if tracked_app_names %}
-            <h2 class="seo-intro__heading">Tracked applications</h2>
-            <ul class="seo-intro__app-list">
-                {% for app_name in tracked_app_names %}
-                <li>{{ app_name }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
         </section>
 
         <div class="app-selector">
@@ -892,8 +925,9 @@
                     <option value="">Loading applications...</option>
                 </select>
             </div>
-            <div style="margin-top: 1rem;">
+            <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
                 <a href="{{ url_for('subscribe_page') }}" class="notification-link">Notifications</a>
+                <a href="{{ url_for('suggest_page') }}" class="notification-link">Suggest Apps</a>
             </div>
         </div>
 
@@ -915,6 +949,20 @@
                 <div class="loading">Loading versions...</div>
             </div>
         </div>
+
+        {% if tracked_app_names %}
+        <details class="tracked-apps-disclosure">
+            <summary>
+                <span class="tracked-apps-disclosure__label">Full list of tracked applications</span>
+                <span class="tracked-apps-disclosure__count">{{ tracked_app_names|length }}</span>
+            </summary>
+            <ul class="tracked-apps-disclosure__list">
+                {% for app_name in tracked_app_names %}
+                <li>{{ app_name }}</li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endif %}
     </div>
 
     {% include '_footer.html' %}
@@ -981,6 +1029,7 @@
                     option.value = app.id;
                     option.textContent = app.name;
                     option.dataset.downloadUrl = app.download_url;
+                    option.dataset.releaseNotesUrl = app.release_notes_url || '';
                     dropdown.appendChild(option);
                 });
                 
@@ -998,7 +1047,7 @@
                         
                         const appName = selectedOption.textContent;
                         const downloadUrl = selectedOption.dataset.downloadUrl;
-                        selectApp(e.target.value, appName, downloadUrl);
+                        selectApp(e.target.value, appName, downloadUrl, selectedOption.dataset.releaseNotesUrl);
                     }
                 });
             } catch (error) {
@@ -1092,7 +1141,7 @@
                 
                 // Create sortable column headers
                 const columns = [
-                    { id: 'first_detected', label: 'First Detected' },
+                    { id: 'first_detected', label: 'Last Update' },
                     { id: 'app_name', label: 'Application' },
                     { id: 'version', label: 'Version' },
                     { id: 'size_bytes', label: 'Size' },
@@ -1403,8 +1452,11 @@
         }
 
         // Select an app and load its versions
-        async function selectApp(appId, appName, downloadUrl) {
+        let currentReleaseNotesUrl = '';
+
+        async function selectApp(appId, appName, downloadUrl, releaseNotesUrl) {
             currentApp = appId;
+            currentReleaseNotesUrl = releaseNotesUrl || '';
             
             // Update section title with back link and fwlink (hide for Intune Agent)
             const titleElement = document.getElementById('selected-app-name');
@@ -1445,6 +1497,12 @@
 
         // Render versions table
         function renderVersionsTable(versions, container) {
+            // Show release notes link above table if available
+            let releaseNotesBar = '';
+            if (currentReleaseNotesUrl) {
+                releaseNotesBar = `<div style="margin-bottom: 1rem;"><a href="${escapeHtml(currentReleaseNotesUrl)}" target="_blank" rel="noopener" style="color: #3b82f6; text-decoration: none; font-size: 0.9rem; font-weight: 500;">Release Notes &rarr;</a></div>`;
+            }
+
             const table = document.createElement('table');
             table.innerHTML = `
                 <thead>
@@ -1593,9 +1651,20 @@
                     `).join('');
                     
                     allComponents.push(subComponentsHtml);
+
+                    // Build release notes link if URL is available (shown above components)
+                    let releaseNotesLinkHtml = '';
+                    if (currentReleaseNotesUrl) {
+                        releaseNotesLinkHtml = `
+                            <div style="padding: 0.75rem 2rem; border-bottom: 1px solid #e5e7eb;">
+                                <a href="${escapeHtml(currentReleaseNotesUrl)}" target="_blank" rel="noopener" style="color: #3b82f6; text-decoration: none; font-size: 0.85rem; font-weight: 500;">View release notes &rarr;</a>
+                            </div>
+                        `;
+                    }
                     
                     componentsRow.innerHTML = `
                         <td colspan="6" class="components-detail-cell">
+                            ${releaseNotesLinkHtml}
                             <div class="components-list">
                                 ${allComponents.join('')}
                             </div>
@@ -1618,7 +1687,7 @@
                 }
             });
             
-            container.innerHTML = '';
+            container.innerHTML = releaseNotesBar;
             container.appendChild(table);
         }
 
@@ -1700,7 +1769,7 @@
                     dropdown.value = option.value;
                     const appName = option.textContent;
                     const downloadUrl = option.dataset.downloadUrl;
-                    selectApp(option.value, appName, downloadUrl);
+                    selectApp(option.value, appName, downloadUrl, option.dataset.releaseNotesUrl);
                 } else {
                     // App not found, show all
                     showAllVersions();

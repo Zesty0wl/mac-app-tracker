@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Suggestions — App Tracker Admin</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f3f4f6; color: #111827; }
+        .topbar { background: #1e293b; color: #fff; padding: .75rem 1.5rem;
+                  display: flex; align-items: center; justify-content: space-between; }
+        .topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .topbar a { color: #94a3b8; text-decoration: none; font-size: .875rem; margin-left: 1.5rem; }
+        .topbar a:hover { color: #fff; }
+        .topbar .nav-links { display: flex; align-items: center; gap: .25rem; }
+        .topbar a.active { color: #fff; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: #fff; border-radius: 10px; padding: 1rem 1.25rem;
+                     box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+        .stat-card .label { font-size: .75rem; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+        .stat-card .value { font-size: 1.75rem; font-weight: 700; margin-top: .2rem; }
+        .section { background: #fff; border-radius: 10px; padding: 1.5rem;
+                   box-shadow: 0 1px 6px rgba(0,0,0,.06); margin-bottom: 1.5rem; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        .section .controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-bottom: 1rem; }
+        label.inline { font-size: .8rem; color: #4b5563; display: flex; align-items: center; gap: .4rem; }
+        input[type="number"], input[type="text"], select {
+            padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: .85rem;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        th, td { text-align: left; padding: .65rem .75rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        th { font-weight: 600; color: #6b7280; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; background: #f9fafb; }
+        td.votes { font-variant-numeric: tabular-nums; font-weight: 600; text-align: center; width: 70px; }
+        .badge { display: inline-block; padding: .15rem .55rem; border-radius: 9999px; font-size: .7rem; font-weight: 600; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .badge-green  { background: #d1fae5; color: #065f46; }
+        .badge-red    { background: #fee2e2; color: #991b1b; }
+        .badge-blue   { background: #dbeafe; color: #1e40af; }
+        .meta { color: #6b7280; font-size: .78rem; word-break: break-all; }
+        .meta code { font-size: .78rem; color: #1f2937; background: #f3f4f6; padding: 1px 4px; border-radius: 4px; }
+        .meta a { color: #2563eb; text-decoration: none; }
+        .meta a:hover { text-decoration: underline; }
+        .actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+        .btn { padding: .35rem .75rem; border-radius: 6px; font-size: .78rem; font-weight: 600;
+               border: 1px solid transparent; cursor: pointer; transition: opacity .15s; }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+        .btn-secondary { background: #fff; color: #374151; border-color: #d1d5db; }
+        .btn-secondary:hover:not(:disabled) { background: #f9fafb; }
+        .btn-danger { background: #fff; color: #b91c1c; border-color: #fecaca; }
+        .btn-danger:hover:not(:disabled) { background: #fef2f2; }
+        .btn-success { background: #059669; color: #fff; }
+        .btn-success:hover:not(:disabled) { background: #047857; }
+        .empty { color: #6b7280; padding: 2rem; text-align: center; }
+        .threshold-hit td.votes { color: #047857; }
+
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, .55);
+            display: none; align-items: center; justify-content: center; z-index: 50;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: #fff; border-radius: 10px; width: min(560px, 92vw);
+            max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+        }
+        .modal header { padding: 1rem 1.25rem; border-bottom: 1px solid #e5e7eb; }
+        .modal header h3 { font-size: 1rem; font-weight: 600; }
+        .modal .body { padding: 1.25rem; display: grid; gap: .9rem; }
+        .modal .body label { display: block; font-size: .75rem; font-weight: 600;
+            color: #374151; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .25rem; }
+        .modal .body input[type="text"], .modal .body input[type="email"],
+        .modal .body textarea {
+            width: 100%; padding: .5rem .65rem; border: 1px solid #d1d5db;
+            border-radius: 6px; font-size: .9rem; font-family: inherit;
+        }
+        .modal .body textarea { min-height: 80px; resize: vertical; }
+        .modal footer {
+            padding: 1rem 1.25rem; border-top: 1px solid #e5e7eb;
+            display: flex; justify-content: flex-end; gap: .5rem;
+        }
+        .modal-error { color: #b91c1c; font-size: .8rem; min-height: 1em; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>App Tracker Admin</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('admin.apps_page') }}">Apps</a>
+            <a href="{{ url_for('admin.suggestions_page') }}" class="active">Suggestions</a>
+            <a href="{{ url_for('admin.email_page') }}">Email</a>
+            <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
+            <a href="{{ url_for('admin.logs_page') }}">Logs</a>
+            <a href="{{ url_for('index') }}">&larr; Back to Site</a>
+            <a href="{{ url_for('admin.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="grid">
+            <div class="stat-card"><div class="label">Pending</div><div class="value" id="stat-pending">&mdash;</div></div>
+            <div class="stat-card"><div class="label">Approved</div><div class="value" id="stat-approved">&mdash;</div></div>
+            <div class="stat-card"><div class="label">Tracked</div><div class="value" id="stat-tracked">&mdash;</div></div>
+            <div class="stat-card"><div class="label">Rejected</div><div class="value" id="stat-rejected">&mdash;</div></div>
+            <div class="stat-card"><div class="label">Total Votes</div><div class="value" id="stat-votes">&mdash;</div></div>
+        </div>
+
+        <div class="section">
+            <h2>Settings</h2>
+            <div class="controls">
+                <label class="inline">
+                    Approval threshold (votes)
+                    <input type="number" id="threshold-input" min="1" max="9999" style="width: 90px;">
+                </label>
+                <button class="btn btn-primary" id="save-threshold">Save</button>
+                <span id="threshold-msg" style="color:#059669; font-size:.8rem;"></span>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Suggestions</h2>
+            <div class="controls">
+                <label class="inline">
+                    Status:
+                    <select id="status-filter">
+                        <option value="">All</option>
+                        <option value="pending" selected>Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="tracked">Tracked</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </label>
+                <button class="btn btn-secondary" id="refresh-btn">Refresh</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>App</th>
+                            <th>Identifier / URL</th>
+                            <th>Submitter</th>
+                            <th>Submitted</th>
+                            <th>Status</th>
+                            <th class="votes">Votes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suggestions-body">
+                        <tr><td colspan="7" class="empty">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+        <div class="modal">
+            <header><h3 id="edit-title">Edit suggestion</h3></header>
+            <form id="edit-form">
+                <div class="body">
+                    <input type="hidden" id="edit-id">
+                    <div>
+                        <label for="edit-name">App name *</label>
+                        <input type="text" id="edit-name" required maxlength="200">
+                    </div>
+                    <div>
+                        <label for="edit-identifier">Bundle identifier</label>
+                        <input type="text" id="edit-identifier" placeholder="com.example.app" maxlength="200">
+                    </div>
+                    <div>
+                        <label for="edit-url">Download URL</label>
+                        <input type="text" id="edit-url" placeholder="https://..." maxlength="500">
+                    </div>
+                    <div>
+                        <label for="edit-release-notes-url">Release Notes URL</label>
+                        <input type="text" id="edit-release-notes-url" placeholder="https://..." maxlength="500">
+                    </div>
+                    <div>
+                        <label for="edit-description">Description</label>
+                        <textarea id="edit-description" maxlength="2000"></textarea>
+                    </div>
+                    <div>
+                        <label for="edit-email">Submitter email</label>
+                        <input type="email" id="edit-email" maxlength="200">
+                    </div>
+                    <div>
+                        <label for="edit-notes">Admin notes</label>
+                        <textarea id="edit-notes" maxlength="2000"></textarea>
+                    </div>
+                    <div class="modal-error" id="edit-error"></div>
+                </div>
+                <footer>
+                    <button type="button" class="btn btn-secondary" id="edit-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="edit-save">Save</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const base = location.pathname.replace(/\/admin\/.*$/, '');
+        let approvalThreshold = 10;
+        let suggestionsById = {};
+
+        async function apiFetch(path, opts) {
+            const r = await fetch(base + '/admin/api' + path, opts);
+            if (r.status === 401) { location.href = base + '/admin/login'; return null; }
+            return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function statusBadge(status) {
+            const map = {
+                pending:  'badge-yellow',
+                approved: 'badge-green',
+                tracked:  'badge-blue',
+                rejected: 'badge-red',
+            };
+            return `<span class="badge ${map[status] || 'badge-blue'}">${status}</span>`;
+        }
+
+        function fmtDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+            return isNaN(d.getTime()) ? iso : d.toLocaleString();
+        }
+
+        async function load() {
+            const status = document.getElementById('status-filter').value;
+            const qs = status ? '?status=' + encodeURIComponent(status) : '';
+            const res = await apiFetch('/suggestions' + qs);
+            if (!res || !res.ok) return;
+            const { suggestions, stats, approval_threshold } = res.data;
+            approvalThreshold = approval_threshold || 10;
+            document.getElementById('threshold-input').value = approvalThreshold;
+            document.getElementById('stat-pending').textContent  = stats.pending;
+            document.getElementById('stat-approved').textContent = stats.approved;
+            document.getElementById('stat-tracked').textContent  = stats.tracked;
+            document.getElementById('stat-rejected').textContent = stats.rejected;
+            document.getElementById('stat-votes').textContent    = stats.total_votes;
+            renderRows(suggestions);
+        }
+
+        function renderRows(items) {
+            const tbody = document.getElementById('suggestions-body');
+            suggestionsById = {};
+            items.forEach(s => { suggestionsById[s.id] = s; });
+            if (!items.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">No suggestions match this filter.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(s => {
+                const ready = s.votes_count >= approvalThreshold;
+                const idLine = s.identifier ? `<div class="meta"><code>${escapeHtml(s.identifier)}</code></div>` : '<div class="meta">&mdash;</div>';
+                const urlLine = s.download_url
+                    ? `<div class="meta"><a href="${escapeHtml(s.download_url)}" target="_blank" rel="noopener nofollow">${escapeHtml(s.download_url)}</a></div>` : '';
+                const desc = s.description ? `<div class="meta" style="margin-top:.3rem;">${escapeHtml(s.description)}</div>` : '';
+                const submitter = s.submitter_email
+                    ? `<a class="meta" href="mailto:${escapeHtml(s.submitter_email)}">${escapeHtml(s.submitter_email)}</a>`
+                    : '<span class="meta">anonymous</span>';
+                const notes = s.admin_notes ? `<div class="meta" style="margin-top:.3rem;"><em>${escapeHtml(s.admin_notes)}</em></div>` : '';
+                const promoteDisabled = (s.status === 'tracked' || s.status === 'rejected') ? 'disabled' : '';
+                const approveDisabled = (s.status === 'approved' || s.status === 'tracked') ? 'disabled' : '';
+                const rejectDisabled  = (s.status === 'rejected' || s.status === 'tracked') ? 'disabled' : '';
+                return `
+                    <tr class="${ready ? 'threshold-hit' : ''}">
+                        <td>
+                            <div style="font-weight:600;">${escapeHtml(s.name)}</div>
+                            ${desc}${notes}
+                        </td>
+                        <td>${idLine}${urlLine}</td>
+                        <td>${submitter}</td>
+                        <td class="meta">${fmtDate(s.created_at)}</td>
+                        <td>${statusBadge(s.status)}</td>
+                        <td class="votes">${s.votes_count}</td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-success" data-action="promote"  data-id="${s.id}" ${promoteDisabled}>Promote</button>
+                                <button class="btn btn-secondary" data-action="edit"    data-id="${s.id}">Edit</button>
+                                <button class="btn btn-secondary" data-action="approve" data-id="${s.id}" ${approveDisabled}>Approve</button>
+                                <button class="btn btn-secondary" data-action="reject"  data-id="${s.id}" ${rejectDisabled}>Reject</button>
+                                <button class="btn btn-danger"    data-action="delete"  data-id="${s.id}">Delete</button>
+                            </div>
+                        </td>
+                    </tr>`;
+            }).join('');
+        }
+
+        document.getElementById('suggestions-body').addEventListener('click', async (e) => {
+            const btn = e.target.closest('button[data-action]');
+            if (!btn) return;
+            const id = btn.dataset.id;
+            const action = btn.dataset.action;
+            btn.disabled = true;
+            try {
+                if (action === 'delete') {
+                    if (!confirm('Delete this suggestion permanently?')) { btn.disabled = false; return; }
+                    await apiFetch('/suggestions/' + id, { method: 'DELETE' });
+                } else if (action === 'edit') {
+                    openEditModal(id);
+                    btn.disabled = false;
+                    return;
+                } else if (action === 'approve' || action === 'reject') {
+                    await apiFetch('/suggestions/' + id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: action === 'approve' ? 'approved' : 'rejected' }),
+                    });
+                } else if (action === 'promote') {
+                    const appId = prompt('App slug for tracker (letters/numbers/dashes):');
+                    if (appId === null) { btn.disabled = false; return; }
+                    const res = await apiFetch('/suggestions/' + id + '/promote', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(appId ? { app_id: appId } : {}),
+                    });
+                    if (res && !res.ok) {
+                        alert(res.data.error || 'Could not promote suggestion.');
+                    }
+                }
+            } finally {
+                load();
+            }
+        });
+
+        document.getElementById('status-filter').addEventListener('change', load);
+        document.getElementById('refresh-btn').addEventListener('click', load);
+
+        document.getElementById('save-threshold').addEventListener('click', async () => {
+            const val = parseInt(document.getElementById('threshold-input').value, 10);
+            if (!val || val < 1) { alert('Threshold must be at least 1'); return; }
+            const res = await apiFetch('/suggestions/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ approval_threshold: val }),
+            });
+            const msg = document.getElementById('threshold-msg');
+            if (res && res.ok) {
+                msg.textContent = 'Saved.';
+                setTimeout(() => msg.textContent = '', 2000);
+                load();
+            } else {
+                msg.style.color = '#b91c1c';
+                msg.textContent = (res && res.data.error) || 'Save failed';
+            }
+        });
+
+        const editModal = document.getElementById('edit-modal');
+
+        function openEditModal(id) {
+            const s = suggestionsById[id];
+            if (!s) return;
+            document.getElementById('edit-id').value = s.id;
+            document.getElementById('edit-name').value = s.name || '';
+            document.getElementById('edit-identifier').value = s.identifier || '';
+            document.getElementById('edit-url').value = s.download_url || '';
+            document.getElementById('edit-release-notes-url').value = s.release_notes_url || '';
+            document.getElementById('edit-description').value = s.description || '';
+            document.getElementById('edit-email').value = s.submitter_email || '';
+            document.getElementById('edit-notes').value = s.admin_notes || '';
+            document.getElementById('edit-error').textContent = '';
+            editModal.classList.add('open');
+            document.getElementById('edit-name').focus();
+        }
+
+        function closeEditModal() {
+            editModal.classList.remove('open');
+        }
+
+        document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+        editModal.addEventListener('click', (e) => {
+            if (e.target === editModal) closeEditModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && editModal.classList.contains('open')) closeEditModal();
+        });
+
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const payload = {
+                name:            document.getElementById('edit-name').value.trim(),
+                identifier:      document.getElementById('edit-identifier').value.trim(),
+                download_url:    document.getElementById('edit-url').value.trim(),
+                release_notes_url: document.getElementById('edit-release-notes-url').value.trim(),
+                description:     document.getElementById('edit-description').value.trim(),
+                submitter_email: document.getElementById('edit-email').value.trim(),
+                admin_notes:     document.getElementById('edit-notes').value,
+            };
+            if (!payload.name) {
+                document.getElementById('edit-error').textContent = 'App name is required.';
+                return;
+            }
+            const saveBtn = document.getElementById('edit-save');
+            saveBtn.disabled = true;
+            const res = await apiFetch('/suggestions/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            saveBtn.disabled = false;
+            if (res && res.ok) {
+                closeEditModal();
+                load();
+            } else {
+                document.getElementById('edit-error').textContent =
+                    (res && res.data.error) || 'Save failed';
+            }
+        });
+
+        load();
+    </script>
+</body>
+</html>

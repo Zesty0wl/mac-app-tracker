@@ -71,11 +71,17 @@ def init_admin_tables():
             description TEXT    DEFAULT '',
             type        TEXT    DEFAULT 'single',
             url_type    TEXT    DEFAULT 'direct',
+            release_notes_url TEXT DEFAULT '',
             enabled     INTEGER DEFAULT 1,
             created_at  TEXT    NOT NULL,
             updated_at  TEXT    NOT NULL
         )
     """)
+
+    # Migration: add release_notes_url to existing tracked_apps tables.
+    tracked_cols = {row[1] for row in cur.execute("PRAGMA table_info(tracked_apps)").fetchall()}
+    if 'release_notes_url' not in tracked_cols:
+        cur.execute("ALTER TABLE tracked_apps ADD COLUMN release_notes_url TEXT DEFAULT ''")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS admin_log (
@@ -307,6 +313,19 @@ def get_tracked_app(app_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
+def get_tracked_app_by_identifier(identifier: str) -> Optional[Dict[str, Any]]:
+    """Look up a tracked app by its bundle / package identifier (case-insensitive)."""
+    if not identifier:
+        return None
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT * FROM tracked_apps WHERE LOWER(identifier) = LOWER(?)",
+        (identifier.strip(),),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def add_tracked_app(data: Dict[str, Any]) -> bool:
     """Add a new tracked app.  Returns False if app_id already exists."""
     conn = _get_conn()
@@ -314,12 +333,14 @@ def add_tracked_app(data: Dict[str, Any]) -> bool:
     now = datetime.utcnow().isoformat()
     try:
         cur.execute("""
-            INSERT INTO tracked_apps (app_id, name, url, identifier, description, type, url_type, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tracked_apps (app_id, name, url, identifier, description, type, url_type, release_notes_url, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data['app_id'], data['name'], data['url'], data['identifier'],
             data.get('description', ''), data.get('type', 'single'),
-            data.get('url_type', 'direct'), 1, now, now,
+            data.get('url_type', 'direct'),
+            (data.get('release_notes_url') or '').strip(),
+            1, now, now,
         ))
         conn.commit()
         conn.close()
@@ -342,12 +363,14 @@ def update_tracked_app(app_id: str, data: Dict[str, Any]) -> bool:
     cur.execute("""
         UPDATE tracked_apps
         SET name = ?, url = ?, identifier = ?, description = ?,
-            type = ?, url_type = ?, enabled = ?, updated_at = ?
+            type = ?, url_type = ?, release_notes_url = ?, enabled = ?, updated_at = ?
         WHERE app_id = ?
     """, (
         data['name'], data['url'], data['identifier'],
         data.get('description', ''), data.get('type', 'single'),
-        data.get('url_type', 'direct'), data.get('enabled', 1),
+        data.get('url_type', 'direct'),
+        (data.get('release_notes_url') or '').strip(),
+        data.get('enabled', 1),
         now, app_id,
     ))
     conn.commit()
@@ -388,6 +411,7 @@ def load_apps_from_db() -> Dict[str, Dict[str, Any]]:
             'description': a['description'],
             'type': a['type'],
             'url_type': a['url_type'],
+            'release_notes_url': a.get('release_notes_url', ''),
         }
     return result
 

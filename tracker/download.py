@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
 from .database import VersionDatabase
 
 DOWNLOAD_TIMEOUT = 300  # 5 minutes
+
+# Order of preference when picking a macOS asset from a GitHub release.
+GITHUB_ASSET_PRIORITY = (".dmg", ".pkg", ".zip")
 
 
 @dataclass
@@ -58,9 +64,11 @@ class PackageDownloader:
 
     # Public API -----------------------------------------------------
     def resolve_download_url(self) -> str:
-        if self.url_type != "metadata_json":
-            return self.original_url
-        return self._resolve_from_metadata(self.original_url)
+        if self.url_type == "metadata_json":
+            return self._resolve_from_metadata(self.original_url)
+        if self.url_type == "github_release":
+            return self._resolve_from_github_release(self.original_url)
+        return self.original_url
 
     def download(self, resolved_url: Optional[str] = None) -> DownloadResult:
         download_url = resolved_url or self.resolve_download_url()
@@ -138,6 +146,75 @@ class PackageDownloader:
 
         pkg_url = self._download_manifest(manifest_url, manifest_headers)
         return pkg_url or url
+
+    def _resolve_from_github_release(self, url: str) -> str:
+        """Resolve a GitHub releases URL (e.g. /releases/latest) to an asset URL."""
+        repo = self._parse_github_repo(url)
+        if not repo:
+            print(f"✗ Could not parse GitHub repo from URL: {url}")
+            return url
+
+        owner, name = repo
+        # Detect a specific tag in the URL: /releases/tag/<tag>
+        tag_match = re.search(r"/releases/tag/([^/?#]+)", url)
+        if tag_match:
+            api_url = f"https://api.github.com/repos/{owner}/{name}/releases/tags/{tag_match.group(1)}"
+        else:
+            api_url = f"https://api.github.com/repos/{owner}/{name}/releases/latest"
+
+        print(f"Querying GitHub release: {api_url}")
+        request = Request(api_url, headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "appledevicepolicy-tracker",
+        })
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            request.add_header("Authorization", f"Bearer {token}")
+
+        try:
+            with urlopen(request, timeout=30) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (URLError, HTTPError) as exc:
+            print(f"✗ GitHub API request failed: {exc}")
+            return url
+        except json.JSONDecodeError as exc:
+            print(f"✗ Could not parse GitHub API response: {exc}")
+            return url
+
+        assets = payload.get("assets") or []
+        asset_url = self._pick_github_asset(assets)
+        if not asset_url:
+            print("✗ No suitable asset found in GitHub release")
+            return url
+
+        tag = payload.get("tag_name") or "latest"
+        print(f"✓ Resolved GitHub release {tag} asset: {asset_url}")
+        return asset_url
+
+    @staticmethod
+    def _parse_github_repo(url: str) -> Optional[Tuple[str, str]]:
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return None
+        host = (parsed.netloc or "").lower()
+        if host not in ("github.com", "www.github.com"):
+            return None
+        parts = [p for p in parsed.path.split("/") if p]
+        if len(parts) < 2:
+            return None
+        return parts[0], parts[1]
+
+    @staticmethod
+    def _pick_github_asset(assets: List[Dict]) -> Optional[str]:
+        candidates = [a for a in assets if a.get("browser_download_url")]
+        for ext in GITHUB_ASSET_PRIORITY:
+            for asset in candidates:
+                name = (asset.get("name") or "").lower()
+                if name.endswith(ext):
+                    return asset["browser_download_url"]
+        # Fall back to the first asset if nothing matched preferred extensions.
+        return candidates[0]["browser_download_url"] if candidates else None
 
     @staticmethod
     def _decode_payload(data: bytes) -> str:
@@ -333,7 +410,9 @@ class PackageDownloader:
         return filename
 
     def _fallback_to_cached_file(self) -> Optional[Path]:
-        existing_files = list(self.download_dir.glob("*.pkg*"))
+        existing_files: List[Path] = []
+        for pattern in ("*.pkg*", "*.dmg*", "*.zip*"):
+            existing_files.extend(self.download_dir.glob(pattern))
         if not existing_files:
             return None
         latest_file = max(existing_files, key=lambda p: p.stat().st_mtime)

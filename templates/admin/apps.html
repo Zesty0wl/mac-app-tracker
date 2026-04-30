@@ -68,6 +68,7 @@
         <div class="nav-links">
             <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
             <a href="{{ url_for('admin.apps_page') }}" class="active">Apps</a>
+            <a href="{{ url_for('admin.suggestions_page') }}">Suggestions</a>
             <a href="{{ url_for('admin.email_page') }}">Email</a>
             <a href="{{ url_for('admin.subscriptions_page') }}">Subscribers</a>
             <a href="{{ url_for('admin.logs_page') }}">Logs</a>
@@ -129,6 +130,10 @@
                     <textarea id="f-description" placeholder="Short description of the app"></textarea>
                 </div>
                 <div class="form-group">
+                    <label for="f-release-notes-url">Release Notes URL <span style="font-weight:400;color:#6b7280;">(optional)</span></label>
+                    <input type="url" id="f-release-notes-url" placeholder="https://example.com/release-notes">
+                </div>
+                <div class="form-group">
                     <label for="f-type">Package Type</label>
                     <select id="f-type">
                         <option value="single">Single</option>
@@ -140,6 +145,7 @@
                     <select id="f-url-type">
                         <option value="direct">Direct (PKG / DMG link)</option>
                         <option value="metadata_json">Metadata JSON</option>
+                        <option value="github_release">GitHub Release (latest)</option>
                     </select>
                 </div>
                 <div class="form-group" id="f-enabled-group" style="display:none;">
@@ -199,6 +205,7 @@
             document.getElementById('f-url').value = '';
             document.getElementById('f-identifier').value = '';
             document.getElementById('f-description').value = '';
+            document.getElementById('f-release-notes-url').value = '';
             document.getElementById('f-type').value = 'single';
             document.getElementById('f-url-type').value = 'direct';
             document.getElementById('f-enabled-group').style.display = 'none';
@@ -217,6 +224,7 @@
             document.getElementById('f-url').value = a.url;
             document.getElementById('f-identifier').value = a.identifier;
             document.getElementById('f-description').value = a.description || '';
+            document.getElementById('f-release-notes-url').value = a.release_notes_url || '';
             document.getElementById('f-type').value = a.type || 'single';
             document.getElementById('f-url-type').value = a.url_type || 'direct';
             document.getElementById('f-enabled').checked = !!a.enabled;
@@ -239,6 +247,7 @@
                 url: document.getElementById('f-url').value.trim(),
                 identifier: document.getElementById('f-identifier').value.trim(),
                 description: document.getElementById('f-description').value.trim(),
+                release_notes_url: document.getElementById('f-release-notes-url').value.trim(),
                 type: document.getElementById('f-type').value,
                 url_type: document.getElementById('f-url-type').value,
                 enabled: document.getElementById('f-enabled').checked ? 1 : 0,

@@ -512,3 +512,145 @@ def api_save_subscription_settings():
                              for k, v in mapping.items()})
     adb.add_log('INFO', 'admin', f"Subscription settings updated by {request.admin_user}")
     return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# App suggestions -- moderation page + REST API
+# ---------------------------------------------------------------------------
+
+from suggestions import database as sdb  # noqa: E402  (kept local to this section)
+
+
+def _slugify_app_id(name: str) -> str:
+    """Generate a sensible default app_id slug from a display name."""
+    out = []
+    for ch in name.lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in (' ', '-', '_', '.') and (out and out[-1] != '-'):
+            out.append('-')
+    slug = ''.join(out).strip('-') or 'suggested-app'
+    return slug[:48]
+
+
+@admin_bp.route('/suggestions')
+@admin_required
+def suggestions_page():
+    return render_template('admin/suggestions.html')
+
+
+@admin_bp.route('/api/suggestions', methods=['GET'])
+@admin_required
+def api_admin_list_suggestions():
+    status = request.args.get('status')
+    items = sdb.list_suggestions_admin(status=status)
+    return jsonify({
+        'suggestions': items,
+        'stats': sdb.stats(),
+        'approval_threshold': sdb.get_approval_threshold(),
+    })
+
+
+@admin_bp.route('/api/suggestions/settings', methods=['PUT'])
+@admin_required
+def api_admin_save_suggestion_settings():
+    data = request.get_json(force=True)
+    threshold = data.get('approval_threshold')
+    if threshold is None:
+        return jsonify({'error': 'approval_threshold is required'}), 400
+    try:
+        threshold_int = int(threshold)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'approval_threshold must be an integer'}), 400
+    if threshold_int < 1:
+        return jsonify({'error': 'approval_threshold must be >= 1'}), 400
+    sdb.set_approval_threshold(threshold_int)
+    adb.add_log('INFO', 'admin',
+                f"Suggestion threshold set to {threshold_int} by {request.admin_user}")
+    return jsonify({'ok': True})
+
+
+@admin_bp.route('/api/suggestions/<int:sid>', methods=['PUT'])
+@admin_required
+def api_admin_update_suggestion(sid):
+    data = request.get_json(force=True)
+    status = data.get('status')
+    notes = data.get('admin_notes')
+    editable_keys = ('name', 'identifier', 'download_url', 'description', 'submitter_email')
+    field_updates = {k: data[k] for k in editable_keys if k in data}
+
+    if status and status not in sdb.VALID_STATUSES:
+        return jsonify({'error': f'status must be one of {sorted(sdb.VALID_STATUSES)}'}), 400
+    if not status and notes is None and not field_updates:
+        return jsonify({'error': 'Nothing to update'}), 400
+
+    if not sdb.get_suggestion(sid):
+        return jsonify({'error': 'Not found'}), 404
+
+    if field_updates and not sdb.update_suggestion_fields(sid, field_updates):
+        return jsonify({'error': 'Invalid field values (name cannot be blank)'}), 400
+
+    if status or notes is not None:
+        current = sdb.get_suggestion(sid)
+        if not sdb.update_suggestion_status(sid, status or current['status'],
+                                            admin_notes=notes):
+            return jsonify({'error': 'Not found'}), 404
+
+    adb.add_log('INFO', 'admin',
+                f"Suggestion #{sid} updated by {request.admin_user}")
+    return jsonify({'ok': True})
+
+
+@admin_bp.route('/api/suggestions/<int:sid>', methods=['DELETE'])
+@admin_required
+def api_admin_delete_suggestion(sid):
+    if not sdb.delete_suggestion(sid):
+        return jsonify({'error': 'Not found'}), 404
+    adb.add_log('INFO', 'admin',
+                f"Suggestion #{sid} deleted by {request.admin_user}")
+    return jsonify({'ok': True})
+
+
+@admin_bp.route('/api/suggestions/<int:sid>/promote', methods=['POST'])
+@admin_required
+def api_admin_promote_suggestion(sid):
+    """Convert an approved suggestion into a tracked app entry.
+
+    The body may override the auto-generated ``app_id`` and ``url_type``.
+    The suggestion is marked ``tracked`` once the app is created so it
+    drops off the public board.
+    """
+    suggestion = sdb.get_suggestion(sid)
+    if not suggestion:
+        return jsonify({'error': 'Not found'}), 404
+
+    overrides = request.get_json(silent=True) or {}
+    app_id = (overrides.get('app_id') or _slugify_app_id(suggestion['name'])).strip()
+    identifier = (overrides.get('identifier') or suggestion.get('identifier') or '').strip()
+    download_url = (overrides.get('url') or suggestion.get('download_url') or '').strip()
+
+    if not identifier:
+        return jsonify({'error': 'A bundle identifier is required to promote this suggestion'}), 400
+    if not download_url:
+        return jsonify({'error': 'A download URL is required to promote this suggestion'}), 400
+
+    payload = {
+        'app_id': app_id,
+        'name': suggestion['name'],
+        'url': download_url,
+        'identifier': identifier,
+        'description': overrides.get('description') or suggestion.get('description') or '',
+        'type': overrides.get('type') or 'single',
+        'url_type': overrides.get('url_type') or 'direct',
+        'release_notes_url': (overrides.get('release_notes_url')
+                              or suggestion.get('release_notes_url') or ''),
+    }
+    if not adb.add_tracked_app(payload):
+        return jsonify({'error': f'app_id "{app_id}" already exists; choose another'}), 409
+
+    sdb.update_suggestion_status(sid, 'tracked',
+                                 admin_notes=f'Promoted to tracked app {app_id}')
+    _trigger_scan(app_id)
+    adb.add_log('INFO', 'admin',
+                f"Suggestion #{sid} promoted to tracked app {app_id} by {request.admin_user}")
+    return jsonify({'ok': True, 'app_id': app_id})

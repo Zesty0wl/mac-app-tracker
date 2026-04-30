@@ -209,7 +209,7 @@ Each app entry requires:
 | `url` | Download URL (direct link or fwlink redirect) |
 | `identifier` | Expected bundle identifier (e.g. `com.microsoft.CompanyPortalMac`) |
 | `type` | `single` or `suite` |
-| `url_type` | `direct` or `metadata_json` |
+| `url_type` | `direct`, `metadata_json`, or `github_release` |
 
 ## Admin Panel
 

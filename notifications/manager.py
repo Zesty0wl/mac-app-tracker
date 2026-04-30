@@ -449,6 +449,17 @@ class SubscriptionManager:
             
             subject = f"{app_name} Updated: v{old_version} → v{new_version}"
             
+            # Build release notes link
+            release_notes_html = ""
+            if version_details:
+                rn_url = version_details.get('release_notes_url', '')
+                if rn_url:
+                    release_notes_html = f"""
+                        <div style="margin:20px 0;">
+                            <a href="{rn_url}" style="color:#0071e3;text-decoration:none;font-size:13px;">View release notes &rarr;</a>
+                        </div>
+                    """
+
             # Build version details table HTML
             details_html = ""
             if version_details:
@@ -591,6 +602,8 @@ class SubscriptionManager:
                             </div>
                         </div>
                         
+                        {release_notes_html}
+                        
                         {details_html if details_html else ''}
                         
                         <div class="link-section">
@@ -652,6 +665,15 @@ class SubscriptionManager:
                     if len(components) > 10:
                         details_text += f"  ...and {len(components) - 10} more\n"
             
+            # Release notes link
+            release_notes_text = ""
+            if version_details:
+                rn_url = version_details.get('release_notes_url', '')
+                if rn_url:
+                    release_notes_text = f"""
+Release Notes: {rn_url}
+"""
+
             text_body = f"""
 {brand}
 
@@ -661,7 +683,7 @@ class SubscriptionManager:
 Previous Version: {old_version}
 New Version: {new_version}
 Detected: {detection_str}
-{details_text}
+{release_notes_text}{details_text}
 View Details: {app_page_url}
 {f'Download Package: {download_url}' if can_include_download else ''}
 
