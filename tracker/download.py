@@ -339,6 +339,7 @@ class PackageDownloader:
         cached_etag = cached_headers.get("etag")
         cached_last_modified = cached_headers.get("last_modified")
         cached_size = cached_headers.get("size_bytes")
+        cached_actual_url = cached_headers.get("actual_url")
 
         if headers.etag and cached_etag and headers.etag == cached_etag:
             print("✓ ETag matches - file unchanged")
@@ -346,23 +347,19 @@ class PackageDownloader:
         if headers.last_modified and cached_last_modified and headers.last_modified == cached_last_modified:
             print("✓ Last-Modified matches - file unchanged")
             return True
+        # Some CDNs (notably Microsoft's onecdn) serve the same immutable
+        # asset with slightly different Last-Modified timestamps from
+        # different edge nodes and don't return ETags. The actual_url
+        # almost always contains the version (e.g. Microsoft_Excel_X.Y.Z.pkg),
+        # so an exact URL match plus identical Content-Length is a strong
+        # enough signal to skip re-downloading the same bytes.
         if (
-            headers.last_modified
-            and cached_last_modified
-            and headers.last_modified == cached_last_modified
+            cached_actual_url
+            and cached_actual_url == actual_url
             and headers.content_length
             and str(cached_size) == headers.content_length
         ):
-            print("✓ Last-Modified and Content-Length both match - file unchanged")
-            return True
-        if (
-            headers.last_modified
-            and cached_last_modified
-            and headers.last_modified == cached_last_modified
-            and headers.content_length
-            and str(cached_size) == headers.content_length
-        ):
-            print("✓ Last-Modified and Content-Length both match - file unchanged")
+            print("✓ URL and Content-Length match - file unchanged")
             return True
         if headers.content_length and str(cached_size) == headers.content_length:
             print("⚠️  Content-Length matches but headers differ - will re-download to verify")
