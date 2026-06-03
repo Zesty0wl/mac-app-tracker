@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subscription Request Sent</title>
+    <title>Confirm Your Email to Activate Notifications</title>
     {% if plausible_domain and plausible_script_url %}
     <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
     {% endif %}
@@ -137,6 +137,42 @@
             font-size: 1.125rem;
         }
 
+        .spam-alert {
+            background: rgba(239, 68, 68, 0.06);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            border-left: 4px solid #ef4444;
+            border-radius: 12px;
+            padding: 1.5rem 1.5rem 1.25rem;
+            margin: 1.5rem 0 2rem;
+            text-align: left;
+        }
+
+        .spam-alert h2 {
+            margin: 0 0 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #b91c1c;
+            letter-spacing: -0.01em;
+        }
+
+        .spam-alert p {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+            line-height: 1.55;
+        }
+
+        .spam-alert ul {
+            margin: 0.75rem 0 0;
+            padding-left: 1.25rem;
+            color: var(--text-primary);
+        }
+
+        .spam-alert li {
+            margin-bottom: 0.4rem;
+            line-height: 1.5;
+        }
+
         .instructions {
             background: rgba(245, 158, 11, 0.05);
             border: 1px solid rgba(245, 158, 11, 0.3);
@@ -219,29 +255,43 @@
     <div class="container">
         <div class="success-card">
             <div class="success-icon">✓</div>
-            <h1>Check Your Email!</h1>
+            <h1>Almost done &mdash; confirm your email now</h1>
             
             <div class="message">
-                We've sent a confirmation email to:
+                We&rsquo;ve just sent a confirmation email to:
             </div>
             
             <div class="email-highlight">
                 {{ email }}
             </div>
-            
+
+            <div class="spam-alert">
+                <h2>Open it now &mdash; check Spam / Junk if you don&rsquo;t see it</h2>
+                <p>
+                    <strong>Your subscription is not active yet.</strong> You will receive
+                    <strong>no notifications</strong> until you click the confirmation link in that email.
+                </p>
+                <ul>
+                    <li>Look in your <strong>Inbox</strong> first &mdash; it usually arrives within a minute.</li>
+                    <li>If it&rsquo;s missing, check <strong>Spam</strong>, <strong>Junk</strong>, <strong>Promotions</strong>, <strong>Updates</strong>, and any <strong>Quarantine</strong> folders.</li>
+                    <li>Search your mail for the subject line <em>&ldquo;Confirm your&hellip; Notifications&rdquo;</em>.</li>
+                    <li>If you find it in spam, mark it as <strong>Not Spam</strong> so future updates reach you.</li>
+                </ul>
+            </div>
+
             <div class="instructions">
-                <h3>Next Steps:</h3>
+                <h3>What to do next</h3>
                 <ol>
-                    <li><strong>Check your inbox</strong> for an email from the Mac App Version Tracker</li>
-                    <li><strong>Click the confirmation link</strong> in the email to activate your subscription</li>
-                    <li><strong>Check your spam folder</strong> if you don't see the email within a few minutes</li>
-                    <li><strong>Note:</strong> The confirmation link expires in 24 hours</li>
+                    <li><strong>Go to your inbox now</strong> &mdash; don&rsquo;t close this until you&rsquo;ve confirmed.</li>
+                    <li><strong>Open the confirmation email</strong> and click the link inside.</li>
+                    <li><strong>The link expires in 24 hours</strong> &mdash; if it lapses, just subscribe again.</li>
+                    {% if contact_email %}
+                    <li>Still nothing after a few minutes? Email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and we&rsquo;ll help.</li>
+                    {% endif %}
                 </ol>
-                
-                <p><strong>Important:</strong> Your subscription will not be active until you click the confirmation link!</p>
             </div>
             
-            <p style="color: var(--text-secondary); margin-bottom: 0;">You can close this page - we'll take care of the rest once you confirm your email.</p>
+            <p style="color: var(--text-secondary); margin-bottom: 0;">Once you click the confirmation link, you&rsquo;re all set &mdash; we&rsquo;ll take it from there.</p>
             
             <a href="{{ url_for('index') }}" class="back-link">← Back to Version Tracker</a>
         </div>

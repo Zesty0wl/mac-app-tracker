@@ -321,6 +321,39 @@
             opacity: 0.6;
         }
 
+        .confirm-notice {
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.45);
+            border-left: 4px solid var(--warning);
+            border-radius: 10px;
+            padding: 1.1rem 1.25rem;
+            margin: 1.5rem 0 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            line-height: 1.55;
+        }
+
+        .confirm-notice strong {
+            color: #b45309;
+        }
+
+        .confirm-notice .confirm-notice-title {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            color: #b45309;
+            font-size: 1rem;
+        }
+
+        .confirm-notice ul {
+            margin: 0.5rem 0 0;
+            padding-left: 1.1rem;
+        }
+
+        .confirm-notice li {
+            margin-bottom: 0.25rem;
+        }
+
         .info-box {
             background: rgba(59, 130, 246, 0.05);
             border: 1px solid rgba(59, 130, 246, 0.2);
@@ -439,6 +472,18 @@
                     <input type="email" id="email" name="email" required 
                            placeholder="your@email.com" 
                            value="{{ request.form.email if request.form.email }}">
+                </div>
+
+                <div class="confirm-notice" role="note">
+                    <span class="confirm-notice-title">Important: you must confirm your email</span>
+                    As soon as you click <strong>Subscribe</strong>, we&rsquo;ll send a confirmation
+                    email. <strong>Open it and click the link right away</strong> &mdash; until you do,
+                    your subscription is inactive and you will not receive any notifications.
+                    <ul>
+                        <li>Check your <strong>inbox</strong> &mdash; the email usually arrives within a minute.</li>
+                        <li>If it&rsquo;s not there, check your <strong>Spam</strong>, <strong>Junk</strong>, <strong>Promotions</strong> or <strong>Quarantine</strong> folders.</li>
+                        <li>The confirmation link <strong>expires in 24 hours</strong>.</li>
+                    </ul>
                 </div>
 
                 <button type="submit" class="submit-btn" id="submitBtn" disabled>
