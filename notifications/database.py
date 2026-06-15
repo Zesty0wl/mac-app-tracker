@@ -640,6 +640,75 @@ class SubscriptionDatabase:
                 conn.execute("ALTER TABLE subscribers ADD COLUMN last_reminder_at TIMESTAMP")
                 conn.commit()
 
+    # ------------------------------------------------------------------
+    # Bounce / non-delivery handling
+    # ------------------------------------------------------------------
+
+    def _ensure_bounce_columns(self):
+        """Add bounce-tracking columns to the subscribers table if missing."""
+        with sqlite3.connect(self.db_path) as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(subscribers)").fetchall()]
+            if 'bounce_count' not in cols:
+                conn.execute("ALTER TABLE subscribers ADD COLUMN bounce_count INTEGER NOT NULL DEFAULT 0")
+            if 'last_bounce_at' not in cols:
+                conn.execute("ALTER TABLE subscribers ADD COLUMN last_bounce_at TIMESTAMP")
+            if 'last_bounce_status' not in cols:
+                conn.execute("ALTER TABLE subscribers ADD COLUMN last_bounce_status TEXT")
+            conn.commit()
+
+    def record_bounce(self, email: str, status_code: str = None,
+                      threshold: int = 2, remove: bool = True) -> Dict[str, Any]:
+        """Record a delivery bounce (NDR) for an email address.
+
+        Increments the matching subscriber's bounce_count. When the count
+        reaches `threshold`, the subscriber is deleted (if `remove` is True).
+        Addresses that don't match a known subscriber are ignored.
+
+        Args:
+            email: the failed recipient address parsed from the NDR.
+            status_code: enhanced SMTP status (e.g. '5.1.1'), stored for audit.
+            threshold: bounce count at which the subscriber is removed.
+            remove: whether to delete the subscriber once the threshold is hit.
+
+        Returns:
+            dict with keys: matched (bool), removed (bool),
+            bounce_count (int), email (str).
+        """
+        self._ensure_bounce_columns()
+        email_hash = self._hash_email(email)
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            row = conn.execute(
+                "SELECT id, bounce_count FROM subscribers WHERE email_hash = ?",
+                (email_hash,),
+            ).fetchone()
+
+            if not row:
+                return {'matched': False, 'removed': False, 'bounce_count': 0, 'email': email}
+
+            subscriber_id, current = row
+            new_count = (current or 0) + 1
+            conn.execute(
+                """UPDATE subscribers
+                   SET bounce_count = ?, last_bounce_at = CURRENT_TIMESTAMP, last_bounce_status = ?
+                   WHERE id = ?""",
+                (new_count, status_code, subscriber_id),
+            )
+
+            removed = False
+            if remove and new_count >= threshold:
+                conn.execute("DELETE FROM subscribers WHERE id = ?", (subscriber_id,))
+                removed = True
+
+            conn.commit()
+            return {
+                'matched': True,
+                'removed': removed,
+                'bounce_count': new_count,
+                'email': email,
+            }
+
 
 def main():
     """Test the subscription database"""

@@ -231,6 +231,134 @@ class M365EmailProvider(EmailProvider):
         except Exception as e:
             raise Exception(f"Failed to send email: {e}")
 
+    # ------------------------------------------------------------------
+    # Mailbox access (read / delete)
+    #
+    # Used for bounce processing and mailbox housekeeping. Requires the
+    # Mail.ReadWrite application permission on the app registration. Scope
+    # the app to the sender mailbox only (Exchange Application Access Policy
+    # or RBAC for Applications) to keep this least-privilege.
+    # ------------------------------------------------------------------
+
+    def _graph_request(self, method: str, path: str, *, params: Dict[str, str] = None,
+                       json_body: Dict[str, Any] = None,
+                       extra_headers: Dict[str, str] = None) -> requests.Response:
+        """Issue an authenticated Graph request.
+
+        `path` is appended to the configured Graph base URL and must start
+        with '/'.
+        """
+        token = self._get_access_token()
+        headers = {'Authorization': f'Bearer {token}'}
+        if json_body is not None:
+            headers['Content-Type'] = 'application/json'
+        if extra_headers:
+            headers.update(extra_headers)
+        url = f"{self.graph_url}{path}"
+        return requests.request(
+            method, url, headers=headers, params=params,
+            data=json.dumps(json_body) if json_body is not None else None,
+            timeout=30,
+        )
+
+    def read_messages(self, folder: str = 'inbox', select: List[str] = None,
+                      page_size: int = 50, max_messages: Optional[int] = None,
+                      body_as_text: bool = True) -> List[Dict[str, Any]]:
+        """Return messages from a mailbox folder, following pagination.
+
+        Args:
+            folder: well-known folder name (e.g. 'inbox', 'sentitems').
+            select: message properties to request.
+            page_size: messages per page ($top).
+            max_messages: stop after this many messages (None = all).
+            body_as_text: request plain-text bodies for easier parsing.
+        """
+        select = select or ['id', 'subject', 'from', 'receivedDateTime', 'bodyPreview', 'body']
+        params = {
+            '$top': str(page_size),
+            '$orderby': 'receivedDateTime desc',
+            '$select': ','.join(select),
+        }
+        extra_headers = {}
+        if body_as_text:
+            extra_headers['Prefer'] = 'outlook.body-content-type="text"'
+
+        path = f"/users/{self.sender_email}/mailFolders/{folder}/messages"
+        messages: List[Dict[str, Any]] = []
+        resp = self._graph_request('GET', path, params=params, extra_headers=extra_headers)
+
+        while True:
+            if resp.status_code != 200:
+                raise Exception(f"Graph read failed (HTTP {resp.status_code}): {resp.text[:300]}")
+            data = resp.json()
+            messages.extend(data.get('value', []))
+
+            if max_messages is not None and len(messages) >= max_messages:
+                return messages[:max_messages]
+
+            next_link = data.get('@odata.nextLink')
+            if not next_link:
+                return messages
+
+            # nextLink is an absolute URL with the query baked in.
+            token = self._get_access_token()
+            headers = {'Authorization': f'Bearer {token}'}
+            if body_as_text:
+                headers['Prefer'] = 'outlook.body-content-type="text"'
+            resp = requests.get(next_link, headers=headers, timeout=30)
+
+    def delete_message(self, message_id: str, permanent: bool = False) -> bool:
+        """Delete a single message.
+
+        Soft delete (default) moves it to Deleted Items; permanent delete
+        places it in the recoverable-items Purges folder. Both require
+        Mail.ReadWrite.
+        """
+        if permanent:
+            path = f"/users/{self.sender_email}/messages/{message_id}/permanentDelete"
+            resp = self._graph_request('POST', path)
+        else:
+            path = f"/users/{self.sender_email}/messages/{message_id}"
+            resp = self._graph_request('DELETE', path)
+
+        if resp.status_code in (200, 202, 204):
+            return True
+        raise Exception(f"Graph delete failed (HTTP {resp.status_code}): {resp.text[:300]}")
+
+    def empty_folder(self, folder: str = 'sentitems', permanent: bool = False,
+                     max_iterations: int = 1000) -> int:
+        """Delete every message in a folder and return the number deleted.
+
+        Fetches a page of message IDs and deletes them, repeating until the
+        folder is empty (bounded by max_iterations as a safety stop).
+        """
+        deleted = 0
+        path = f"/users/{self.sender_email}/mailFolders/{folder}/messages"
+
+        for _ in range(max_iterations):
+            resp = self._graph_request('GET', path, params={'$top': '100', '$select': 'id'})
+            if resp.status_code != 200:
+                raise Exception(f"Graph read failed (HTTP {resp.status_code}): {resp.text[:300]}")
+
+            ids = [m['id'] for m in resp.json().get('value', [])]
+            if not ids:
+                break
+
+            progress = 0
+            for mid in ids:
+                try:
+                    if self.delete_message(mid, permanent=permanent):
+                        deleted += 1
+                        progress += 1
+                except Exception as e:
+                    print(f"[empty_folder] Failed to delete message: {e}")
+
+            # Stop if a full page yielded no successful deletions (avoid spin).
+            if progress == 0:
+                break
+
+        return deleted
+
     def send_test_email(self, recipients: List[str] = None) -> Dict[str, Any]:
         recipients = recipients or self.default_recipients
         return super().send_test_email(recipients)

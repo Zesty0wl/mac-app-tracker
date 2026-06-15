@@ -142,6 +142,74 @@ def run_subscription_maintenance():
     except Exception as e:
         print(f"[subscription-maintenance] Error: {e}")
 
+def run_mailbox_maintenance():
+    """Once per day: process bounces and clear the M365 Sent Items folder.
+
+    Gated by admin settings so it only fires for the M365 provider, at the
+    configured UTC hour, at most once per calendar day.
+    """
+    try:
+        import admin.database as adb
+
+        if (adb.get_email_setting('mailbox_maint_enabled') or '1') != '1':
+            return
+
+        provider_type = (adb.get_email_setting('provider') or '').lower()
+        if not provider_type and os.environ.get('M365_CLIENT_ID'):
+            provider_type = 'm365'
+        if provider_type and provider_type != 'm365':
+            return
+
+        now = datetime.utcnow()
+        target_hour = int(adb.get_email_setting('mailbox_maint_hour') or 4)
+        if now.hour < target_hour:
+            return
+
+        today = now.strftime('%Y-%m-%d')
+        if (adb.get_email_setting('mailbox_maint_last_run') or '') == today:
+            return
+
+        threshold = int(adb.get_email_setting('bounce_threshold') or 2)
+        clear_sent = (adb.get_email_setting('mailbox_clear_sent') or '1') == '1'
+        permanent = (adb.get_email_setting('mailbox_permanent_delete') or '1') == '1'
+
+        from notifications.bounce_processor import process_mailbox
+        result = process_mailbox(
+            threshold=threshold,
+            process_bounces=True,
+            clear_sent=clear_sent,
+            permanent=permanent,
+            dry_run=False,
+            logger=lambda m: print(f"[mailbox-maintenance] {m}"),
+        )
+
+        # Record the run date even on partial failure to avoid hammering the
+        # mailbox repeatedly within the same day.
+        adb.set_email_setting('mailbox_maint_last_run', today)
+
+        if result.get('ok'):
+            removed = result.get('subscribers_removed', [])
+            msg = (f"Processed {result.get('ndrs', 0)} NDR(s), recorded "
+                   f"{result.get('bounces_recorded', 0)} bounce(s), removed "
+                   f"{len(removed)} subscriber(s), deleted "
+                   f"{result.get('dmarc_deleted', 0)} DMARC report(s) and "
+                   f"{result.get('autoreplies_deleted', 0)} auto-reply(ies), cleared "
+                   f"{result.get('sent_deleted', 0)} sent item(s)")
+            print(f"[mailbox-maintenance] {msg}")
+            adb.add_log('INFO', 'email', f"Mailbox maintenance: {msg}")
+        else:
+            err = result.get('error', 'unknown error')
+            print(f"[mailbox-maintenance] Failed: {err}")
+            adb.add_log('ERROR', 'email', f"Mailbox maintenance failed: {err}")
+
+    except Exception as e:
+        print(f"[mailbox-maintenance] Error: {e}")
+        try:
+            import admin.database as adb
+            adb.add_log('ERROR', 'email', f"Mailbox maintenance error: {e}")
+        except Exception:
+            pass
+
 def main():
     """Main scheduler loop"""
     print("Starting Mac Apps version checker scheduler")
@@ -150,12 +218,14 @@ def main():
     # Run immediately on startup
     run_check()
     run_subscription_maintenance()
+    run_mailbox_maintenance()
     
     # Then run on schedule
     while True:
         time.sleep(CHECK_INTERVAL)
         run_check()
         run_subscription_maintenance()
+        run_mailbox_maintenance()
 
 if __name__ == '__main__':
     main()

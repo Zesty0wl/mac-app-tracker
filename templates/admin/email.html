@@ -173,7 +173,63 @@
             </div>
             <span id="test-status" class="status-msg" style="display:inline-block;margin-top:.5rem;"></span>
         </div>
+
+        <div class="section" id="maintenance-section">
+            <h2>Mailbox Maintenance <span class="badge badge-gray">M365 only</span></h2>
+            <p style="font-size:.875rem;color:#6b7280;margin-bottom:1rem;">
+                Once per day the sender mailbox is processed: bounced
+                (undeliverable) recipients are counted, subscribers that bounce
+                repeatedly are removed, bounce/DMARC reports and out-of-office
+                auto-replies are cleared from the inbox (genuine mail is kept),
+                and the Sent Items folder is emptied.
+                Requires the <strong>Mail.ReadWrite</strong> application permission.
+            </p>
+
+            <div class="form-group" style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="maint_enabled" style="width:auto;">
+                <label for="maint_enabled" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:#111827;">
+                    Enable daily mailbox maintenance
+                </label>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="maint_hour">Run At (UTC hour)</label>
+                    <input type="number" id="maint_hour" min="0" max="23" placeholder="4">
+                    <div class="hint">0--23. The job runs on the first scheduler pass at or after this hour.</div>
+                </div>
+                <div class="form-group">
+                    <label for="bounce_threshold">Bounce Threshold</label>
+                    <input type="number" id="bounce_threshold" min="1" placeholder="2">
+                    <div class="hint">Remove a subscriber after this many bounces.</div>
+                </div>
+            </div>
+
+            <div class="form-group" style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="clear_sent" style="width:auto;">
+                <label for="clear_sent" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:#111827;">
+                    Clear Sent Items every day
+                </label>
+            </div>
+
+            <div class="form-group" style="display:flex;align-items:center;gap:.5rem;">
+                <input type="checkbox" id="permanent_delete" style="width:auto;">
+                <label for="permanent_delete" style="margin:0;text-transform:none;letter-spacing:0;font-weight:500;color:#111827;">
+                    Permanently delete (skip Deleted Items)
+                </label>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="maint-save-btn" onclick="saveMaintenanceSettings()">Save</button>
+                <button class="btn btn-secondary" id="maint-dry-btn" onclick="runMaintenance(true)">Dry Run</button>
+                <button class="btn btn-secondary" id="maint-run-btn" onclick="runMaintenance(false)">Run Now</button>
+                <span id="maint-status" class="status-msg"></span>
+            </div>
+            <p class="hint" id="maint-last-run" style="margin-top:.5rem;"></p>
+            <pre id="maint-result" style="display:none;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:.75rem;font-size:.8rem;margin-top:.75rem;white-space:pre-wrap;"></pre>
+        </div>
     </div>
+
 
 <script>
 const base = location.pathname.replace(/\/admin\/.*$/, '');
@@ -273,7 +329,97 @@ async function sendTest() {
     }
 }
 
+async function loadMaintenanceSettings() {
+    try {
+        const res = await fetch(base + '/admin/api/email/maintenance-settings');
+        if (!res.ok) return;
+        const s = await res.json();
+        document.getElementById('maint_enabled').checked = !!s.enabled;
+        document.getElementById('maint_hour').value = (s.hour ?? 4);
+        document.getElementById('bounce_threshold').value = (s.bounce_threshold ?? 2);
+        document.getElementById('clear_sent').checked = !!s.clear_sent;
+        document.getElementById('permanent_delete').checked = !!s.permanent_delete;
+        const lr = document.getElementById('maint-last-run');
+        lr.textContent = s.last_run ? ('Last run: ' + s.last_run + ' (UTC)') : 'Last run: never';
+    } catch (e) {
+        console.error('Failed to load maintenance settings', e);
+    }
+}
+
+async function saveMaintenanceSettings() {
+    const btn = document.getElementById('maint-save-btn');
+    const status = document.getElementById('maint-status');
+    btn.disabled = true;
+    status.textContent = '';
+
+    const payload = {
+        enabled: document.getElementById('maint_enabled').checked,
+        hour: parseInt(document.getElementById('maint_hour').value, 10),
+        bounce_threshold: parseInt(document.getElementById('bounce_threshold').value, 10),
+        clear_sent: document.getElementById('clear_sent').checked,
+        permanent_delete: document.getElementById('permanent_delete').checked,
+    };
+
+    try {
+        const res = await fetch(base + '/admin/api/email/maintenance-settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        status.textContent = 'Saved.';
+        status.className = 'status-msg ok';
+    } catch (e) {
+        status.textContent = 'Error saving.';
+        status.className = 'status-msg err';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function runMaintenance(dryRun) {
+    const status = document.getElementById('maint-status');
+    const resultBox = document.getElementById('maint-result');
+    const runBtn = document.getElementById('maint-run-btn');
+    const dryBtn = document.getElementById('maint-dry-btn');
+
+    if (!dryRun && !confirm('Run mailbox maintenance now? This will remove bounced subscribers and permanently clear Sent Items.')) {
+        return;
+    }
+
+    runBtn.disabled = true; dryBtn.disabled = true;
+    status.textContent = dryRun ? 'Running dry run...' : 'Running...';
+    status.className = 'status-msg';
+    resultBox.style.display = 'none';
+
+    try {
+        const res = await fetch(base + '/admin/api/email/process-mailbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: dryRun }),
+        });
+        const data = await res.json();
+        resultBox.style.display = 'block';
+        resultBox.textContent = JSON.stringify(data, null, 2);
+        if (res.ok && data.ok) {
+            status.textContent = dryRun ? 'Dry run complete.' : 'Done.';
+            status.className = 'status-msg ok';
+            loadMaintenanceSettings();
+        } else {
+            status.textContent = data.error || 'Failed.';
+            status.className = 'status-msg err';
+        }
+    } catch (e) {
+        status.textContent = 'Error running maintenance.';
+        status.className = 'status-msg err';
+    } finally {
+        runBtn.disabled = false; dryBtn.disabled = false;
+    }
+}
+
 loadSettings();
+loadMaintenanceSettings();
+
 </script>
 </body>
 </html>

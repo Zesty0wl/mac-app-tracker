@@ -342,6 +342,100 @@ def api_send_test_email():
 
 
 # ---------------------------------------------------------------------------
+# Mailbox maintenance (M365) -- bounce processing + Sent Items cleanup
+# ---------------------------------------------------------------------------
+
+@admin_bp.route('/api/email/maintenance-settings', methods=['GET'])
+@admin_required
+def api_get_maintenance_settings():
+    return jsonify({
+        'enabled': (adb.get_email_setting('mailbox_maint_enabled') or '1') == '1',
+        'hour': int(adb.get_email_setting('mailbox_maint_hour') or 4),
+        'bounce_threshold': int(adb.get_email_setting('bounce_threshold') or 2),
+        'clear_sent': (adb.get_email_setting('mailbox_clear_sent') or '1') == '1',
+        'permanent_delete': (adb.get_email_setting('mailbox_permanent_delete') or '1') == '1',
+        'last_run': adb.get_email_setting('mailbox_maint_last_run') or '',
+    })
+
+
+@admin_bp.route('/api/email/maintenance-settings', methods=['PUT'])
+@admin_required
+def api_save_maintenance_settings():
+    data = request.get_json(force=True)
+
+    def _bool(key, default='1'):
+        val = data.get(key)
+        if val is None:
+            return default
+        return '1' if val in (True, '1', 1, 'true', 'on') else '0'
+
+    settings = {
+        'mailbox_maint_enabled': _bool('enabled'),
+        'mailbox_clear_sent': _bool('clear_sent'),
+        'mailbox_permanent_delete': _bool('permanent_delete'),
+    }
+
+    if 'hour' in data:
+        try:
+            hour = int(data['hour'])
+            if 0 <= hour <= 23:
+                settings['mailbox_maint_hour'] = str(hour)
+        except (TypeError, ValueError):
+            pass
+
+    if 'bounce_threshold' in data:
+        try:
+            threshold = int(data['bounce_threshold'])
+            if threshold >= 1:
+                settings['bounce_threshold'] = str(threshold)
+        except (TypeError, ValueError):
+            pass
+
+    adb.save_email_settings(settings)
+    adb.add_log('INFO', 'admin', f"Mailbox maintenance settings updated by {request.admin_user}")
+    return jsonify({'ok': True})
+
+
+@admin_bp.route('/api/email/process-mailbox', methods=['POST'])
+@admin_required
+def api_process_mailbox():
+    data = request.get_json(silent=True) or {}
+    dry_run = bool(data.get('dry_run', False))
+
+    threshold = int(adb.get_email_setting('bounce_threshold') or 2)
+    clear_sent = (adb.get_email_setting('mailbox_clear_sent') or '1') == '1'
+    permanent = (adb.get_email_setting('mailbox_permanent_delete') or '1') == '1'
+
+    try:
+        from notifications.bounce_processor import process_mailbox
+        result = process_mailbox(
+            threshold=threshold,
+            process_bounces=True,
+            clear_sent=clear_sent,
+            permanent=permanent,
+            dry_run=dry_run,
+        )
+
+        if result.get('ok'):
+            mode = 'dry-run' if dry_run else 'live'
+            removed = len(result.get('subscribers_removed', []))
+            adb.add_log('INFO', 'email',
+                        f"Manual mailbox maintenance ({mode}) by {request.admin_user}: "
+                        f"{result.get('ndrs', 0)} NDR(s), {result.get('bounces_recorded', 0)} bounce(s), "
+                        f"{removed} removed, {result.get('sent_deleted', 0)} sent cleared")
+            if not dry_run:
+                from datetime import datetime as _dt
+                adb.set_email_setting('mailbox_maint_last_run', _dt.utcnow().strftime('%Y-%m-%d'))
+        else:
+            adb.add_log('ERROR', 'email', f"Manual mailbox maintenance failed: {result.get('error')}")
+
+        return jsonify(result)
+    except Exception as e:
+        adb.add_log('ERROR', 'email', f"Manual mailbox maintenance error: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # Subscriptions management -- page
 # ---------------------------------------------------------------------------
 
