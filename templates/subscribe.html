@@ -321,10 +321,19 @@
             opacity: 0.6;
         }
 
+        .submit-hint {
+            margin: -0.75rem 0 1.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .submit-hint.hidden {
+            display: none;
+        }
+
         .confirm-notice {
-            background: rgba(245, 158, 11, 0.08);
-            border: 1px solid rgba(245, 158, 11, 0.45);
-            border-left: 4px solid var(--warning);
+            background: #f9fafb;
+            border: 1px solid var(--border);
             border-radius: 10px;
             padding: 1.1rem 1.25rem;
             margin: 1.5rem 0 0.5rem;
@@ -334,14 +343,14 @@
         }
 
         .confirm-notice strong {
-            color: #b45309;
+            color: var(--text-primary);
         }
 
         .confirm-notice .confirm-notice-title {
             display: block;
             font-weight: 700;
             margin-bottom: 0.4rem;
-            color: #b45309;
+            color: var(--text-primary);
             font-size: 1rem;
         }
 
@@ -474,22 +483,6 @@
                            value="{{ request.form.email if request.form.email }}">
                 </div>
 
-                <div class="confirm-notice" role="note">
-                    <span class="confirm-notice-title">Important: you must confirm your email</span>
-                    As soon as you click <strong>Subscribe</strong>, we&rsquo;ll send a confirmation
-                    email. <strong>Open it and click the link right away</strong> &mdash; until you do,
-                    your subscription is inactive and you will not receive any notifications.
-                    <ul>
-                        <li>Check your <strong>inbox</strong> &mdash; the email usually arrives within a minute.</li>
-                        <li>If it&rsquo;s not there, check your <strong>Spam</strong>, <strong>Junk</strong>, <strong>Promotions</strong> or <strong>Quarantine</strong> folders.</li>
-                        <li>The confirmation link <strong>expires in 24 hours</strong>.</li>
-                    </ul>
-                </div>
-
-                <button type="submit" class="submit-btn" id="submitBtn" disabled>
-                    Subscribe to Notifications
-                </button>
-
                 <div class="app-selection">
                     <h3>Choose Applications to Monitor</h3>
                     
@@ -525,6 +518,23 @@
                         </tbody>
                     </table>
                 </div>
+
+                <div class="confirm-notice" role="note">
+                    <span class="confirm-notice-title">Important: you must confirm your email</span>
+                    As soon as you click <strong>Subscribe</strong>, we&rsquo;ll send a confirmation
+                    email. <strong>Open it and click the link right away</strong> &mdash; until you do,
+                    your subscription is inactive and you will not receive any notifications.
+                    <ul>
+                        <li>Check your <strong>inbox</strong> &mdash; the email usually arrives within a minute.</li>
+                        <li>If it&rsquo;s not there, check your <strong>Spam</strong>, <strong>Junk</strong>, <strong>Promotions</strong> or <strong>Quarantine</strong> folders.</li>
+                        <li>The confirmation link <strong>stays valid for 7 days</strong>.</li>
+                    </ul>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn" disabled>
+                    Subscribe to Notifications
+                </button>
+                <p class="submit-hint" id="submitHint">Enter your email and tick at least one application above to continue.</p>
 
                 <div class="subscription-help">
                     <h4>Need to change or cancel later?</h4>
@@ -622,15 +632,29 @@
         
         function updateSubmitButton() {
             const submitBtn = document.getElementById('submitBtn');
+            const submitHint = document.getElementById('submitHint');
             const emailInput = document.getElementById('email');
+            const hasEmail = emailInput.value.trim();
             const anyAppSelected = document.querySelector('input[name="apps"]:checked');
-            
-            if (emailInput.value.trim() && anyAppSelected) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Subscribe to Notifications';
-            } else {
-                submitBtn.disabled = true;
-                submitBtn.textContent = 'Subscribe to Notifications';
+
+            const ready = hasEmail && anyAppSelected;
+            submitBtn.disabled = !ready;
+
+            // Spell out exactly what's still missing so a greyed-out button is
+            // never a dead end.
+            if (submitHint) {
+                if (ready) {
+                    submitHint.classList.add('hidden');
+                } else {
+                    submitHint.classList.remove('hidden');
+                    if (!hasEmail && !anyAppSelected) {
+                        submitHint.textContent = 'Enter your email and tick at least one application above to continue.';
+                    } else if (!hasEmail) {
+                        submitHint.textContent = 'Enter your email address above to continue.';
+                    } else {
+                        submitHint.textContent = 'Tick at least one application above to continue.';
+                    }
+                }
             }
         }
         

@@ -519,65 +519,26 @@ def api_send_reminders():
         return jsonify({'error': 'days must be >= 1'}), 400
 
     db = _get_sub_db()
-    pending = db.get_unconfirmed_needing_reminder(days)
-    sent = 0
 
-    if pending:
-        try:
-            from notifications.providers import get_email_provider, NoopEmailProvider
-            provider = get_email_provider()
-            if isinstance(provider, NoopEmailProvider):
-                return jsonify({'error': 'No email provider configured'}), 400
+    try:
+        from notifications.providers import get_email_provider, NoopEmailProvider
+        from notifications.manager import send_confirmation_reminders
+        provider = get_email_provider()
+        if isinstance(provider, NoopEmailProvider):
+            return jsonify({'error': 'No email provider configured'}), 400
 
-            from admin.database import get_email_setting
-            site_url = get_email_setting('site_url') or ''
-            script_name = '/app-tracker'
+        from admin.database import get_email_setting
+        site_url = get_email_setting('site_url') or ''
+        result = send_confirmation_reminders(
+            db, provider, site_url, days=days,
+            logger=lambda m: adb.add_log('WARN', 'email', m),
+        )
+    except Exception as exc:
+        adb.add_log('ERROR', 'email', f"Reminder batch failed: {exc}")
+        return jsonify({'error': str(exc)}), 500
 
-            for sub in pending:
-                # Generate a fresh confirmation token
-                sid = sub['id']
-                email = sub['email']
-                token = db._generate_token()
-                from datetime import datetime, timedelta
-                expires_at = datetime.now() + timedelta(hours=48)
-
-                with __import__('sqlite3').connect(db.db_path) as conn:
-                    conn.execute("PRAGMA foreign_keys = ON")
-                    conn.execute(
-                        "DELETE FROM subscription_tokens WHERE subscriber_id = ? AND token_type = 'confirm'",
-                        (sid,),
-                    )
-                    conn.execute(
-                        """INSERT INTO subscription_tokens
-                           (subscriber_id, token, token_type, expires_at)
-                           VALUES (?, ?, 'confirm', ?)""",
-                        (sid, token, expires_at),
-                    )
-                    conn.commit()
-
-                confirmation_url = f"{site_url}{script_name}/confirm-subscription?token={token}"
-                html = (
-                    f"<p>Hi,</p>"
-                    f"<p>You recently signed up for Mac app version notifications but haven't confirmed yet.</p>"
-                    f"<p><a href=\"{confirmation_url}\">Click here to confirm your subscription</a></p>"
-                    f"<p>This link expires in 48 hours. If you did not request this, you can ignore this email.</p>"
-                )
-                try:
-                    provider.send_email(
-                        to_emails=[email],
-                        subject="Reminder: Confirm your Mac App Tracker subscription",
-                        body_html=html,
-                    )
-                    db.mark_reminder_sent(sid)
-                    sent += 1
-                except Exception as exc:
-                    adb.add_log('WARN', 'email', f"Reminder to {email} failed: {exc}")
-        except Exception as exc:
-            adb.add_log('ERROR', 'email', f"Reminder batch failed: {exc}")
-            return jsonify({'error': str(exc)}), 500
-
-    adb.add_log('INFO', 'admin', f"Sent {sent} confirmation reminder(s)")
-    return jsonify({'ok': True, 'sent': sent, 'pending': len(pending)})
+    adb.add_log('INFO', 'admin', f"Sent {result['sent']} confirmation reminder(s)")
+    return jsonify({'ok': True, 'sent': result['sent'], 'pending': result['pending']})
 
 
 @admin_bp.route('/api/subscriptions/settings', methods=['GET'])

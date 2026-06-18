@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urljoin
 
-from notifications.database import SubscriptionDatabase
+from notifications.database import SubscriptionDatabase, CONFIRM_TOKEN_TTL_DAYS
 from notifications.providers import get_email_provider
 
 
@@ -171,6 +171,42 @@ class SubscriptionManager:
             print(f"Error in subscribe: {e}")
             return False, "An error occurred while processing your subscription."
     
+    def resend_confirmation(self, email: str) -> Tuple[bool, str]:
+        """
+        Re-send the confirmation email for a pending sign-up.
+
+        Issues a fresh link without touching the subscriber's app
+        preferences. The reply is deliberately the same whether or not the
+        address is actually awaiting confirmation, so the endpoint can't be
+        used to probe which addresses are subscribed.
+
+        Args:
+            email: Email address
+
+        Returns:
+            Tuple of (success, message)
+        """
+        generic = ("If that address is waiting to be confirmed, we've just sent "
+                   "a fresh confirmation link. Please check your inbox — and your "
+                   "spam or junk folder, just in case.")
+        try:
+            valid, error = self.validate_email(email)
+            if not valid:
+                return False, error
+
+            result = self.db.regenerate_confirm_token(email)
+            if result:
+                token, app_ids = result
+                # Best effort — a delivery failure here is reported the same as
+                # success so we don't leak the address's status.
+                self._send_confirmation_email(email, token, app_ids)
+
+            return True, generic
+
+        except Exception as e:
+            print(f"Error in resend_confirmation: {e}")
+            return True, generic
+
     def _send_confirmation_email(self, email: str, token: str, app_ids: List[str]) -> bool:
         """
         Send confirmation email
@@ -185,7 +221,8 @@ class SubscriptionManager:
         """
         try:
             confirmation_url = f"{self.base_url}/confirm-subscription?token={token}"
-            
+            expiry_text = f"{CONFIRM_TOKEN_TTL_DAYS} days"
+
             # Determine subscription description
             if not app_ids:
                 subscription_desc = "all Microsoft Mac applications"
@@ -200,80 +237,47 @@ class SubscriptionManager:
                 app_list_text = "\n".join([f"- {name}" for name in app_names])
             
             brand = os.environ.get('EMAIL_BRAND_NAME', os.environ.get('SITE_NAME', 'Mac Apps Version Tracker'))
-            subject = f"Confirm your {brand} Notifications"
+            subject = f"Confirm your email to start {brand} notifications"
+            home_url = f"{self.base_url}/app-tracker"
 
-            html_body = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; margin: 20px; line-height: 1.6;">
-                <div style="max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 10px;">
-                        {brand} Notifications
-                    </h2>
-                    
-                    <p>Hello!</p>
-                    
-                    <p>Thank you for subscribing to receive email notifications about application version updates. 
-                    You've requested notifications for <strong>{subscription_desc}</strong>.</p>
-                    
-                    <div style="background-color: #f3f2f1; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <h3 style="margin-top: 0; color: #323130;">Your Subscription:</h3>
-                        <ul>
-                            {app_list_html}
-                        </ul>
-                    </div>
-                    
-                    <div style="background-color: #e6f3ff; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center;">
-                        <h3 style="margin-top: 0; color: #0078d4;">Confirm Your Subscription</h3>
-                        <p>Click the button below to confirm your subscription:</p>
-                        <a href="{confirmation_url}" 
-                           style="display: inline-block; background-color: #0078d4; color: white; 
-                                  padding: 12px 30px; text-decoration: none; border-radius: 5px; 
-                                  font-weight: bold; margin: 10px 0;">
-                            Confirm Subscription
-                        </a>
-                        <p style="font-size: 12px; color: #666; margin-top: 15px;">
-                            Link expires in 24 hours
-                        </p>
-                    </div>
-                    <div style="border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px;">
-                        <p style="font-size: 12px; color: #666;">
-                            If you didn't request this subscription, you can safely ignore this email.<br>
-                            The subscription will not be activated without confirmation.
-                        </p>
-                        <p style="font-size: 12px; color: #666;">
-                            This email was sent by the {brand} at 
-                            <a href="{self.base_url}">{self.base_url}</a>
-                        </p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            text_body = f"""
-            {brand} Notifications - Confirmation Required
-            ==================================================================
-            
-            Hello!
-            
-            Thank you for subscribing to receive email notifications about Microsoft Mac application 
-            version updates. You've requested notifications for {subscription_desc}.
-            
-            Your Subscription:
-            {app_list_text}
-            
-            CONFIRM YOUR SUBSCRIPTION:
-            Please click this link to confirm your subscription:
-            {confirmation_url}
-            
-            (Link expires in 24 hours)
-            
-            If you didn't request this subscription, you can safely ignore this email.
-            The subscription will not be activated without confirmation.
-            
-            This email was sent by the {brand} at {self.base_url}
-            """
-            
+            # Plain bulleted list of specific apps (omitted for the "all" case,
+            # which the sentence already covers).
+            apps_block_html = ""
+            if app_ids:
+                apps_block_html = (
+                    '<ul style="margin:0 0 18px;padding-left:20px;color:#374151;">'
+                    + app_list_html + '</ul>'
+                )
+
+            inner = f"""<p style="margin:0 0 16px;">Hi,</p>
+<p style="margin:0 0 16px;">Thanks for subscribing to {brand}. You asked to be notified about <strong>{subscription_desc}</strong>.</p>
+{apps_block_html}<p style="margin:0 0 18px;">Please confirm your email address to activate your subscription:</p>
+{email_button(confirmation_url, "Confirm subscription")}
+<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">This link is valid for {expiry_text}. If the button doesn't work, copy and paste this address into your browser:<br>
+<a href="{confirmation_url}" style="color:{_EMAIL_ACCENT};word-break:break-all;">{confirmation_url}</a></p>
+<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">If you didn't request this, you can safely ignore this email &mdash; nothing is activated without your confirmation.</p>"""
+
+            html_body = render_email_shell(
+                brand, home_url, inner,
+                preheader=f"Confirm your email to start receiving {brand} update notifications.",
+            )
+
+            text_lines = [
+                brand, "",
+                "Hi,", "",
+                f"Thanks for subscribing to {brand}. You asked to be notified about {subscription_desc}.", "",
+            ]
+            if app_ids:
+                text_lines += [app_list_text, ""]
+            text_lines += [
+                "Confirm your email to activate your subscription:",
+                confirmation_url, "",
+                f"This link is valid for {expiry_text}. If you didn't request this, you can ignore "
+                "this email — nothing is activated without your confirmation.", "",
+                f"Sent by {brand} — {home_url}",
+            ]
+            text_body = "\n".join(text_lines)
+
             result = self.email_notifier.send_email([email], subject, html_body, text_body)
             return result['success']
             
@@ -695,9 +699,14 @@ You are receiving this because you subscribed to {app_name} updates.
 Visit {self.base_url}/app-tracker for more information.
             """
             
-            result = self.email_notifier.send_email([email], subject, html_body, text_body)
+            # Subscribed mail carries a one-click List-Unsubscribe header (in
+            # addition to the in-body link) per Gmail/Yahoo bulk-sender guidance.
+            result = self.email_notifier.send_email(
+                [email], subject, html_body, text_body,
+                list_unsubscribe_url=unsubscribe_url,
+            )
             return result['success']
-            
+
         except Exception as e:
             print(f"Error sending version notification email: {e}")
             return False
@@ -709,6 +718,146 @@ Visit {self.base_url}/app-tracker for more information.
     def cleanup_expired_tokens(self):
         """Clean up expired tokens"""
         self.db.cleanup_expired_tokens()
+
+
+# ---------------------------------------------------------------------------
+# Shared HTML email chrome
+#
+# One restrained, professional shell for every transactional email: a small
+# logo + brand wordmark, a clean white card, generous spacing, and a single
+# table-based ("bulletproof") call-to-action button so the CTA survives Outlook
+# (which strips background-color from <a> tags, turning a styled link invisible).
+# ---------------------------------------------------------------------------
+
+_EMAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+_EMAIL_ACCENT = "#1d4ed8"   # solid, readable blue — white text on it has strong contrast
+
+
+def email_button(url: str, label: str, color: str = _EMAIL_ACCENT) -> str:
+    """A table-cell button (bgcolor on the <td>, which Outlook respects)."""
+    return (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0;">'
+        f'<tr><td align="center" bgcolor="{color}" style="border-radius:8px;">'
+        f'<a href="{url}" style="display:inline-block;padding:13px 32px;'
+        f'font-family:{_EMAIL_FONT};font-size:15px;font-weight:600;color:#ffffff;'
+        f'text-decoration:none;border-radius:8px;">{label}</a>'
+        f'</td></tr></table>'
+    )
+
+
+def render_email_shell(brand: str, home_url: str, inner_html: str, preheader: str = "") -> str:
+    """Wrap body content in the shared header/footer chrome."""
+    logo_url = f"{home_url}/static/img/logo.png" if home_url else ""
+    domain = home_url.split('//', 1)[-1].split('/', 1)[0] if home_url else brand
+    logo_cell = (
+        f'<td style="padding-right:10px;line-height:0;">'
+        f'<img src="{logo_url}" width="32" height="32" alt="" '
+        f'style="display:block;border-radius:6px;"></td>'
+    ) if logo_url else ''
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="color-scheme" content="light only">
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{preheader}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e6e8eb;border-radius:12px;">
+<tr><td style="padding:22px 32px;border-bottom:1px solid #eef0f2;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+{logo_cell}
+<td style="font-family:{_EMAIL_FONT};font-size:16px;font-weight:600;color:#111827;">{brand}</td>
+</tr></table>
+</td></tr>
+<tr><td style="padding:32px;font-family:{_EMAIL_FONT};font-size:15px;line-height:1.6;color:#374151;">
+{inner_html}
+</td></tr>
+<tr><td style="padding:18px 32px;border-top:1px solid #eef0f2;font-family:{_EMAIL_FONT};font-size:12px;line-height:1.5;color:#9aa1ac;">
+Sent by {brand}. Visit <a href="{home_url}" style="color:#9aa1ac;">{domain}</a>.
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
+def build_confirmation_reminder(brand: str, confirmation_url: str,
+                                expiry_text: str, home_url: str) -> Tuple[str, str]:
+    """Build the (html, text) bodies for a confirmation-reminder email.
+
+    Same clean shell as the original opt-in email, led by why it matters (the
+    subscription is inactive until confirmed) so it converts rather than reading
+    like a duplicate.
+    """
+    inner = f"""<p style="margin:0 0 16px;">Hi,</p>
+<p style="margin:0 0 16px;">You signed up for {brand} update notifications, but your email address hasn't been confirmed yet &mdash; so your subscription is <strong>not active</strong> and nothing is being sent to you.</p>
+<p style="margin:0 0 18px;">Confirm your email to activate it:</p>
+{email_button(confirmation_url, "Confirm subscription")}
+<p style="margin:18px 0 0;font-size:13px;color:#6b7280;">This link is valid for {expiry_text}. If the button doesn't work, copy and paste this address into your browser:<br>
+<a href="{confirmation_url}" style="color:{_EMAIL_ACCENT};word-break:break-all;">{confirmation_url}</a></p>
+<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">Didn't sign up? You can ignore this email &mdash; we won't contact you again.</p>"""
+    html = render_email_shell(
+        brand, home_url, inner,
+        preheader=f"Please confirm your email to activate {brand} notifications.",
+    )
+    text = (
+        f"{brand}\n\n"
+        f"Hi,\n\n"
+        f"You signed up for {brand} update notifications but haven't confirmed your "
+        f"email yet, so your subscription is not active and nothing is being sent to you.\n\n"
+        f"Confirm your email to activate it:\n{confirmation_url}\n\n"
+        f"This link is valid for {expiry_text}. If you didn't sign up, just ignore this "
+        f"email and we won't contact you again.\n"
+    )
+    return html, text
+
+
+def send_confirmation_reminders(sub_db, provider, site_url: str, brand: str = None,
+                                script_name: str = '/app-tracker', days: int = 2,
+                                max_reminders: int = 2, logger=None) -> Dict[str, int]:
+    """Send a branded confirmation reminder to each unconfirmed subscriber due one.
+
+    Shared by the hourly scheduler and the admin "Send reminders now" button so
+    both produce the same branded, capped email. A fresh confirmation token is
+    issued per recipient (existing app preferences untouched); the per-subscriber
+    reminder cap is enforced by get_unconfirmed_needing_reminder.
+
+    Returns {'sent': n, 'pending': total_due}.
+    """
+    log = logger or (lambda m: None)
+    brand = brand or os.environ.get('EMAIL_BRAND_NAME',
+                                    os.environ.get('SITE_NAME', 'Mac Apps Version Tracker'))
+    expiry_text = f"{CONFIRM_TOKEN_TTL_DAYS} days"
+    home_url = f"{site_url}{script_name}" if site_url else ""
+
+    pending = sub_db.get_unconfirmed_needing_reminder(days, max_reminders=max_reminders)
+    sent = 0
+    for sub in pending:
+        email = sub['email']
+        result = sub_db.regenerate_confirm_token(email)
+        if not result:
+            # Confirmed or removed between the query and now — skip.
+            continue
+        token, _app_ids = result
+        confirmation_url = f"{site_url}{script_name}/confirm-subscription?token={token}"
+        html, text = build_confirmation_reminder(brand, confirmation_url, expiry_text, home_url)
+        try:
+            provider.send_email(
+                to_emails=[email],
+                subject=f"Action needed: confirm your {brand} subscription",
+                body_html=html,
+                body_text=text,
+            )
+            sub_db.mark_reminder_sent(sub['id'])
+            sent += 1
+        except Exception as exc:
+            log(f"Reminder to {email} failed: {exc}")
+
+    return {'sent': sent, 'pending': len(pending)}
 
 
 def main():

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmation Email Resent</title>
+    {% if plausible_domain and plausible_script_url %}
+    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --bg-secondary: #f3f4f6;
+            --bg-card: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --nav-bg: #ffffff;
+            --nav-border: #e5e7eb;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.47;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        nav {
+            background: var(--nav-bg);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid var(--nav-border);
+        }
+
+        .nav-content {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .nav-brand {
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-decoration: none;
+            letter-spacing: -0.01em;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+            background: var(--bg-secondary);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 4rem 1rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 3rem;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: {{ '#10b981' if success else '#ef4444' }};
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .message {
+            font-size: 1.125rem;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .email-highlight {
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin: 1.5rem 0;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 1.0625rem;
+            word-break: break-all;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--primary);
+            color: white;
+            padding: 0.875rem 2rem;
+            text-decoration: none;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: var(--primary-hover);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 2rem 1rem;
+            }
+
+            .card {
+                padding: 2rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .icon {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include '_header.html' %}
+
+    <div class="container">
+        <div class="card">
+            <div class="icon">{{ '📧' if success else '⚠️' }}</div>
+            <h1>{{ 'Check your inbox' if success else 'Something went wrong' }}</h1>
+
+            <div class="message">{{ message }}</div>
+
+            {% if success and email %}
+            <div class="email-highlight">{{ email }}</div>
+            <p style="color: var(--text-secondary); margin-bottom: 0;">
+                Remember to look in your Spam, Junk and Quarantine folders &mdash; and mark the
+                message as &ldquo;Not Spam&rdquo; so future update emails reach you.
+            </p>
+            {% endif %}
+
+            <a href="{{ url_for('index') }}" class="back-link">← Back to Version Tracker</a>
+        </div>
+    </div>
+
+    {% include '_footer.html' %}
+</body>
+</html>

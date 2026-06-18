@@ -15,6 +15,13 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 
+# How long a confirmation link stays valid. Kept generous (a full week) so
+# people who sign up and only check their mail a day or two later — or over a
+# weekend — still land on a live link instead of an "expired" error. This is
+# the single source of truth; copy shown to users should match it.
+CONFIRM_TOKEN_TTL_DAYS = 7
+
+
 @dataclass
 class Subscriber:
     """Data class for subscriber information"""
@@ -198,7 +205,7 @@ class SubscriptionDatabase:
             
             # Generate confirmation token
             token = self._generate_token()
-            expires_at = datetime.now() + timedelta(hours=24)
+            expires_at = datetime.now() + timedelta(days=CONFIRM_TOKEN_TTL_DAYS)
             
             conn.execute(
                 """INSERT INTO subscription_tokens 
@@ -226,6 +233,63 @@ class SubscriptionDatabase:
                 (subscriber_id, app_id)
             )
     
+    def regenerate_confirm_token(self, email: str) -> Optional[Tuple[str, List[str]]]:
+        """
+        Issue a fresh confirmation token for an existing *unconfirmed*
+        subscriber, leaving their app preferences untouched.
+
+        Used by the "resend confirmation" flow so someone who lost the first
+        email can get a new link without re-entering the whole form.
+
+        Args:
+            email: Email address
+
+        Returns:
+            (token, app_ids) for an unconfirmed subscriber, or None if the
+            address is unknown or already confirmed. Callers should treat the
+            None case opaquely (don't reveal which addresses exist).
+        """
+        email_hash = self._hash_email(email)
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+
+            row = conn.execute(
+                "SELECT id, confirmed FROM subscribers WHERE email_hash = ?",
+                (email_hash,),
+            ).fetchone()
+
+            if not row or row[1]:
+                # Unknown address, or already confirmed — nothing to resend.
+                return None
+
+            subscriber_id = row[0]
+
+            # Replace any outstanding confirm tokens with a fresh one.
+            conn.execute(
+                "DELETE FROM subscription_tokens WHERE subscriber_id = ? AND token_type = 'confirm'",
+                (subscriber_id,),
+            )
+            token = self._generate_token()
+            expires_at = datetime.now() + timedelta(days=CONFIRM_TOKEN_TTL_DAYS)
+            conn.execute(
+                """INSERT INTO subscription_tokens
+                   (subscriber_id, token, token_type, expires_at)
+                   VALUES (?, ?, 'confirm', ?)""",
+                (subscriber_id, token, expires_at),
+            )
+
+            app_ids = [
+                r[0]
+                for r in conn.execute(
+                    "SELECT app_id FROM app_subscriptions WHERE subscriber_id = ? AND subscribed = TRUE",
+                    (subscriber_id,),
+                ).fetchall()
+            ]
+
+            conn.commit()
+            return token, app_ids
+
     def confirm_subscription(self, token: str) -> bool:
         """
         Confirm a subscription using a token
@@ -602,23 +666,37 @@ class SubscriptionDatabase:
             return cursor.rowcount
 
     def get_unconfirmed_needing_reminder(self, subscribed_days_ago: int,
-                                         already_reminded_within_hours: int = 24) -> List[Dict[str, Any]]:
+                                         already_reminded_within_hours: int = 24,
+                                         max_reminders: int = 2) -> List[Dict[str, Any]]:
         """Return unconfirmed subscribers who signed up more than
-        *subscribed_days_ago* days ago and have not been reminded recently.
+        *subscribed_days_ago* days ago and are still due a reminder.
 
-        We track reminders via a column `last_reminder_at` (added lazily).
+        A subscriber is due a reminder when all of these hold:
+          - they signed up more than *subscribed_days_ago* days ago,
+          - their last reminder (if any) was more than
+            *already_reminded_within_hours* hours ago, and
+          - they have received fewer than *max_reminders* reminders.
+
+        The reminder cap stops us from nagging the same unconfirmed address
+        every day until cleanup — repeated unsolicited mail to people who
+        never engage is exactly what drives spam complaints and hurts
+        deliverability for everyone else.
+
+        Reminder state is tracked via the lazily-added `last_reminder_at` and
+        `reminder_count` columns.
         """
         self._ensure_last_reminder_column()
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                """SELECT id, email, created_at, last_reminder_at
+                """SELECT id, email, created_at, last_reminder_at, reminder_count
                    FROM subscribers
                    WHERE confirmed = FALSE
                    AND julianday('now') - julianday(created_at) > ?
+                   AND COALESCE(reminder_count, 0) < ?
                    AND (last_reminder_at IS NULL
                         OR (julianday('now') - julianday(last_reminder_at)) * 24 > ?)""",
-                (subscribed_days_ago, already_reminded_within_hours),
+                (subscribed_days_ago, max_reminders, already_reminded_within_hours),
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -627,18 +705,23 @@ class SubscriptionDatabase:
         self._ensure_last_reminder_column()
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                "UPDATE subscribers SET last_reminder_at = CURRENT_TIMESTAMP WHERE id = ?",
+                """UPDATE subscribers
+                   SET last_reminder_at = CURRENT_TIMESTAMP,
+                       reminder_count = COALESCE(reminder_count, 0) + 1
+                   WHERE id = ?""",
                 (subscriber_id,),
             )
             conn.commit()
 
     def _ensure_last_reminder_column(self):
-        """Add the last_reminder_at column if it doesn't exist yet."""
+        """Add the reminder-tracking columns if they don't exist yet."""
         with sqlite3.connect(self.db_path) as conn:
             cols = [r[1] for r in conn.execute("PRAGMA table_info(subscribers)").fetchall()]
             if 'last_reminder_at' not in cols:
                 conn.execute("ALTER TABLE subscribers ADD COLUMN last_reminder_at TIMESTAMP")
-                conn.commit()
+            if 'reminder_count' not in cols:
+                conn.execute("ALTER TABLE subscribers ADD COLUMN reminder_count INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
 
     # ------------------------------------------------------------------
     # Bounce / non-delivery handling

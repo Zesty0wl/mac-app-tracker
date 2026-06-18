@@ -79,60 +79,19 @@ def run_subscription_maintenance():
         # Auto-reminders for unconfirmed subscribers
         if reminder_enabled:
             days = int(adb.get_email_setting('sub_auto_reminder_days') or 2)
-            pending = sub_db.get_unconfirmed_needing_reminder(days)
-            if not pending:
-                return
-
             try:
                 from notifications.providers import get_email_provider, NoopEmailProvider
+                from notifications.manager import send_confirmation_reminders
                 provider = get_email_provider()
                 if isinstance(provider, NoopEmailProvider):
                     return
 
                 site_url = adb.get_email_setting('site_url') or ''
-                script_name = '/app-tracker'
-                sent = 0
-
-                for sub in pending:
-                    sid = sub['id']
-                    email = sub['email']
-                    token = sub_db._generate_token()
-                    from datetime import timedelta
-                    expires_at = datetime.now() + timedelta(hours=48)
-
-                    import sqlite3
-                    with sqlite3.connect(sub_db.db_path) as conn:
-                        conn.execute("PRAGMA foreign_keys = ON")
-                        conn.execute(
-                            "DELETE FROM subscription_tokens WHERE subscriber_id = ? AND token_type = 'confirm'",
-                            (sid,),
-                        )
-                        conn.execute(
-                            """INSERT INTO subscription_tokens
-                               (subscriber_id, token, token_type, expires_at)
-                               VALUES (?, ?, 'confirm', ?)""",
-                            (sid, token, expires_at),
-                        )
-                        conn.commit()
-
-                    confirmation_url = f"{site_url}{script_name}/confirm-subscription?token={token}"
-                    html = (
-                        f"<p>Hi,</p>"
-                        f"<p>You recently signed up for Mac app version notifications but haven't confirmed yet.</p>"
-                        f"<p><a href=\"{confirmation_url}\">Click here to confirm your subscription</a></p>"
-                        f"<p>This link expires in 48 hours. If you did not request this, you can ignore this email.</p>"
-                    )
-                    try:
-                        provider.send_email(
-                            to_emails=[email],
-                            subject="Reminder: Confirm your Mac App Tracker subscription",
-                            body_html=html,
-                        )
-                        sub_db.mark_reminder_sent(sid)
-                        sent += 1
-                    except Exception as exc:
-                        print(f"[subscription-maintenance] Reminder to {email} failed: {exc}")
-
+                result = send_confirmation_reminders(
+                    sub_db, provider, site_url, days=days,
+                    logger=lambda m: print(f"[subscription-maintenance] {m}"),
+                )
+                sent = result['sent']
                 if sent:
                     print(f"[subscription-maintenance] Sent {sent} confirmation reminder(s)")
                     adb.add_log('INFO', 'subscriptions', f"Auto-reminders: sent {sent} confirmation reminder(s)")

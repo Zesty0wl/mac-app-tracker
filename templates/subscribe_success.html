@@ -3,22 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Confirm Your Email to Activate Notifications</title>
+    <title>Confirm your email to activate notifications</title>
     {% if plausible_domain and plausible_script_url %}
     <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
             --primary: #3b82f6;
             --primary-hover: #2563eb;
-            --bg-main: #f9fafb;
             --bg-secondary: #f3f4f6;
             --bg-card: #ffffff;
             --text-primary: #111827;
@@ -27,15 +22,13 @@
             --nav-bg: #ffffff;
             --nav-border: #e5e7eb;
             --success: #10b981;
-            --warning: #f59e0b;
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
             background: var(--bg-secondary);
             color: var(--text-primary);
-            line-height: 1.47;
-            margin: 0;
+            line-height: 1.5;
             -webkit-font-smoothing: antialiased;
         }
 
@@ -64,18 +57,9 @@
             font-weight: 700;
             text-decoration: none;
             letter-spacing: -0.01em;
-            transition: opacity 0.2s;
         }
 
-        .nav-brand:hover {
-            opacity: 0.8;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
+        .nav-links { display: flex; gap: 0.5rem; align-items: center; }
 
         .nav-links a {
             color: var(--text-secondary);
@@ -84,168 +68,125 @@
             font-weight: 500;
             padding: 0.5rem 0.75rem;
             border-radius: 0.5rem;
-            transition: all 0.2s;
         }
 
-        .nav-links a:hover {
-            color: var(--primary);
-            background: var(--bg-secondary);
-        }
+        .nav-links a:hover { color: var(--primary); background: var(--bg-secondary); }
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 4rem 1rem;
-        }
+        .container { max-width: 640px; margin: 0 auto; padding: 3.5rem 1rem; }
 
-        .success-card {
+        .card {
             background: var(--bg-card);
-            border-radius: 18px;
+            border-radius: 16px;
             padding: 3rem;
             border: 1px solid var(--border);
-            text-align: center;
         }
 
-        .success-icon {
-            font-size: 4rem;
+        .badge {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #ecfdf5;
+            color: var(--success);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
             margin-bottom: 1.5rem;
         }
 
         h1 {
-            font-size: 2rem;
+            font-size: 1.75rem;
             font-weight: 700;
-            color: var(--primary);
-            margin-bottom: 1.5rem;
-            letter-spacing: -0.025em;
-        }
-
-        .message {
-            font-size: 1.125rem;
             color: var(--text-primary);
-            margin-bottom: 1.5rem;
-            line-height: 1.6;
-        }
-
-        .email-highlight {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            border-radius: 12px;
-            padding: 1.25rem;
-            margin: 2rem 0;
-            font-weight: 600;
-            color: var(--primary);
-            font-size: 1.125rem;
-        }
-
-        .spam-alert {
-            background: rgba(239, 68, 68, 0.06);
-            border: 1px solid rgba(239, 68, 68, 0.35);
-            border-left: 4px solid #ef4444;
-            border-radius: 12px;
-            padding: 1.5rem 1.5rem 1.25rem;
-            margin: 1.5rem 0 2rem;
-            text-align: left;
-        }
-
-        .spam-alert h2 {
-            margin: 0 0 0.5rem;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #b91c1c;
-            letter-spacing: -0.01em;
-        }
-
-        .spam-alert p {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1rem;
-            line-height: 1.55;
-        }
-
-        .spam-alert ul {
-            margin: 0.75rem 0 0;
-            padding-left: 1.25rem;
-            color: var(--text-primary);
-        }
-
-        .spam-alert li {
-            margin-bottom: 0.4rem;
-            line-height: 1.5;
-        }
-
-        .instructions {
-            background: rgba(245, 158, 11, 0.05);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
-            text-align: left;
-        }
-
-        .instructions h3 {
-            color: var(--warning);
-            margin-top: 0;
+            letter-spacing: -0.02em;
             margin-bottom: 1rem;
-            font-size: 1.25rem;
+        }
+
+        .lead {
+            font-size: 1.0625rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .lead strong { color: var(--text-primary); }
+
+        .steps {
+            border-top: 1px solid var(--border);
+            padding-top: 1.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .steps h2 {
+            font-size: 0.8125rem;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
         }
 
-        .instructions ol {
-            margin: 0;
-            padding-left: 1.25rem;
+        .steps ol { margin: 0; padding-left: 1.25rem; }
+
+        .steps li { margin-bottom: 0.625rem; color: var(--text-primary); }
+
+        .steps li:last-child { margin-bottom: 0; }
+
+        .resend {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: #fafafa;
         }
 
-        .instructions li {
-            margin-bottom: 0.75rem;
-            color: var(--text-primary);
+        .resend span { color: var(--text-secondary); font-size: 0.9375rem; }
+
+        .resend form { margin: 0; margin-left: auto; }
+
+        .resend button {
+            background: transparent;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.625rem;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s ease;
         }
 
-        .instructions p {
-            margin-bottom: 0;
-            margin-top: 1rem;
-            color: var(--text-primary);
+        .resend button:hover { background: var(--primary); color: #fff; }
+
+        .muted {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+            margin-top: 1.5rem;
+        }
+
+        .muted a { color: var(--primary); }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 2rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9375rem;
             font-weight: 500;
         }
 
-        .back-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: var(--primary);
-            color: white;
-            padding: 0.875rem 2rem;
-            text-decoration: none;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            margin-top: 2rem;
-            transition: all 0.3s ease;
-        }
-
-        .back-link:hover {
-            background: var(--primary-hover);
-            transform: translateY(-1px);
-        }
+        .back-link:hover { color: var(--primary); }
 
         @media (max-width: 768px) {
-            .container {
-                padding: 2rem 1rem;
-            }
-
-            .success-card {
-                padding: 2rem;
-            }
-
-            h1 {
-                font-size: 1.75rem;
-            }
-
-            .message {
-                font-size: 1rem;
-            }
-
-            .success-icon {
-                font-size: 3rem;
-            }
+            .container { padding: 2rem 1rem; }
+            .card { padding: 2rem; }
+            h1 { font-size: 1.5rem; }
+            .resend form { margin-left: 0; width: 100%; }
+            .resend button { width: 100%; }
         }
     </style>
 </head>
@@ -253,51 +194,39 @@
     {% include '_header.html' %}
 
     <div class="container">
-        <div class="success-card">
-            <div class="success-icon">✓</div>
-            <h1>Almost done &mdash; confirm your email now</h1>
-            
-            <div class="message">
-                We&rsquo;ve just sent a confirmation email to:
-            </div>
-            
-            <div class="email-highlight">
-                {{ email }}
-            </div>
+        <div class="card">
+            <div class="badge">&check;</div>
+            <h1>Almost done &mdash; confirm your email</h1>
+            <p class="lead">
+                We&rsquo;ve sent a confirmation link to <strong>{{ email }}</strong>.
+                Your subscription stays inactive until you click it.
+            </p>
 
-            <div class="spam-alert">
-                <h2>Open it now &mdash; check Spam / Junk if you don&rsquo;t see it</h2>
-                <p>
-                    <strong>Your subscription is not active yet.</strong> You will receive
-                    <strong>no notifications</strong> until you click the confirmation link in that email.
-                </p>
-                <ul>
-                    <li>Look in your <strong>Inbox</strong> first &mdash; it usually arrives within a minute.</li>
-                    <li>If it&rsquo;s missing, check <strong>Spam</strong>, <strong>Junk</strong>, <strong>Promotions</strong>, <strong>Updates</strong>, and any <strong>Quarantine</strong> folders.</li>
-                    <li>Search your mail for the subject line <em>&ldquo;Confirm your&hellip; Notifications&rdquo;</em>.</li>
-                    <li>If you find it in spam, mark it as <strong>Not Spam</strong> so future updates reach you.</li>
-                </ul>
-            </div>
-
-            <div class="instructions">
-                <h3>What to do next</h3>
+            <div class="steps">
+                <h2>What to do next</h2>
                 <ol>
-                    <li><strong>Go to your inbox now</strong> &mdash; don&rsquo;t close this until you&rsquo;ve confirmed.</li>
-                    <li><strong>Open the confirmation email</strong> and click the link inside.</li>
-                    <li><strong>The link expires in 24 hours</strong> &mdash; if it lapses, just subscribe again.</li>
-                    {% if contact_email %}
-                    <li>Still nothing after a few minutes? Email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and we&rsquo;ll help.</li>
-                    {% endif %}
+                    <li>Open the email from us and click <strong>Confirm subscription</strong>.</li>
+                    <li>Can&rsquo;t find it? Check your <strong>spam</strong>, <strong>junk</strong> and <strong>quarantine</strong> folders &mdash; it usually arrives within a minute.</li>
+                    <li>The link stays valid for <strong>7 days</strong>.</li>
                 </ol>
             </div>
-            
-            <p style="color: var(--text-secondary); margin-bottom: 0;">Once you click the confirmation link, you&rsquo;re all set &mdash; we&rsquo;ll take it from there.</p>
-            
-            <a href="{{ url_for('index') }}" class="back-link">← Back to Version Tracker</a>
+
+            <div class="resend">
+                <span>Didn&rsquo;t receive it?</span>
+                <form method="POST" action="{{ url_for('resend_confirmation') }}">
+                    <input type="hidden" name="email" value="{{ email }}">
+                    <button type="submit">Resend email</button>
+                </form>
+            </div>
+
+            {% if contact_email %}
+            <p class="muted">Still stuck? Email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and we&rsquo;ll help.</p>
+            {% endif %}
+
+            <a href="{{ url_for('index') }}" class="back-link">&larr; Back to Version Tracker</a>
         </div>
     </div>
 
     {% include '_footer.html' %}
-
 </body>
 </html>

@@ -731,21 +731,45 @@ def confirm_subscription():
     else:
         return render_template('confirm_error.html', message=message)
 
+@app.route('/resend-confirmation', methods=['POST'])
+def resend_confirmation():
+    """Re-send a confirmation email for a pending sign-up."""
+    email = request.form.get('email', '').strip()
+
+    if not email:
+        return redirect(url_for('subscribe_page'))
+
+    success, message = subscription_manager.resend_confirmation(email)
+    return render_template('resend_result.html', success=success,
+                           message=message, email=email)
+
 @app.route('/manage-subscriptions')
 def manage_subscriptions():
     """Show subscription management page"""
     return render_template('manage_subscriptions.html')
 
-@app.route('/unsubscribe')
+@app.route('/unsubscribe', methods=['GET', 'POST'])
 def unsubscribe():
-    """Handle unsubscribe request"""
-    token = request.args.get('token')
-    
+    """Handle unsubscribe request.
+
+    GET renders the confirmation page for a human clicking the in-email link.
+    POST is the RFC 8058 one-click path: mailbox providers (Gmail, Yahoo, etc.)
+    POST to the List-Unsubscribe URL with no UI, so we just action it and
+    return a bare 200/400 rather than an HTML page.
+    """
+    token = request.args.get('token') or request.form.get('token')
+
     if not token:
+        if request.method == 'POST':
+            return ('Missing token', 400)
         return render_template('unsubscribe_error.html', message='Invalid unsubscribe link.')
-    
+
     success, message = subscription_manager.unsubscribe(token)
-    
+
+    if request.method == 'POST':
+        # One-click: no rendered page is shown to the user.
+        return ('Unsubscribed', 200) if success else (message, 400)
+
     if success:
         return render_template('unsubscribe_success.html')
     else:

@@ -16,13 +16,51 @@ Usage:
 
 import os
 import json
+import base64
 import requests
 from abc import ABC, abstractmethod
 from datetime import datetime
+from email.message import EmailMessage
+from email.utils import formataddr, formatdate, make_msgid
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _resolve_sender_identity(config: Dict[str, str], sender_email: str):
+    """Resolve the friendly From-name, Reply-To and unsubscribe mailto shared by
+    every provider, from config (admin DB) first then environment.
+
+    A recognisable From-name and a working Reply-To are basic deliverability
+    hygiene — mail from a bare address with no display name looks more like spam
+    and gives recipients nowhere to reply.
+    """
+    config = config or {}
+    brand = os.environ.get('EMAIL_BRAND_NAME', os.environ.get('SITE_NAME', 'Mac Apps Version Tracker'))
+    from_name = (config.get('email_from_name') or os.environ.get('EMAIL_FROM_NAME') or brand).strip()
+    reply_to = (config.get('email_reply_to') or os.environ.get('EMAIL_REPLY_TO')
+                or os.environ.get('CONTACT_EMAIL') or '').strip() or None
+    unsub_mailto = (config.get('email_unsubscribe_mailto')
+                    or os.environ.get('EMAIL_UNSUBSCRIBE_MAILTO')
+                    or os.environ.get('CONTACT_EMAIL') or '').strip() or None
+    return from_name, reply_to, unsub_mailto
+
+
+def _list_unsubscribe_header(url: str, mailto: str = None):
+    """Build the (List-Unsubscribe, List-Unsubscribe-Post) header values for a
+    one-click unsubscribe URL, per RFC 2369 / RFC 8058.
+
+    Gmail and Yahoo's bulk-sender rules expect a List-Unsubscribe header on
+    subscribed mail, and reward a working one-click variant. The https URL must
+    accept POST for the one-click flow to function.
+    """
+    if not url:
+        return None, None
+    parts = [f"<{url}>"]
+    if mailto:
+        parts.append(f"<mailto:{mailto}?subject=unsubscribe>")
+    return ", ".join(parts), "List-Unsubscribe=One-Click"
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +73,17 @@ class EmailProvider(ABC):
     @abstractmethod
     def send_email(self, to_emails: List[str], subject: str,
                    body_html: str = None, body_text: str = None,
-                   cc_emails: List[str] = None) -> Dict[str, Any]:
-        """Send an email.  Returns dict with at least 'success' (bool) and 'message' (str)."""
+                   cc_emails: List[str] = None, *,
+                   from_name: str = None, reply_to: str = None,
+                   list_unsubscribe_url: str = None) -> Dict[str, Any]:
+        """Send an email.  Returns dict with at least 'success' (bool) and 'message' (str).
+
+        Optional deliverability args:
+            from_name: friendly display name for the From address.
+            reply_to: Reply-To address.
+            list_unsubscribe_url: https URL for one-click unsubscribe; when set,
+                List-Unsubscribe and List-Unsubscribe-Post headers are added.
+        """
         ...
 
     def send_test_email(self, recipients: List[str] = None) -> Dict[str, Any]:
@@ -147,6 +194,8 @@ class M365EmailProvider(EmailProvider):
                 "Set M365_CLIENT_ID, M365_CLIENT_SECRET, and SENDER_EMAIL."
             )
 
+        self.from_name, self.reply_to, self.unsub_mailto = _resolve_sender_identity(config, self.sender_email)
+
         self.token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
         self.graph_url = os.getenv('GRAPH_API_URL', 'https://graph.microsoft.com/v1.0')
         self.access_token = None
@@ -174,9 +223,56 @@ class M365EmailProvider(EmailProvider):
 
         return self.access_token
 
+    def _build_mime(self, to_emails: List[str], subject: str,
+                    body_html: str, body_text: str, cc_emails: List[str],
+                    from_name: str, reply_to: str,
+                    list_unsubscribe_url: str) -> bytes:
+        """Assemble an RFC 5322 MIME message.
+
+        We send MIME rather than Graph's JSON message because Graph's
+        internetMessageHeaders only accepts ``X-`` prefixed headers, which makes
+        a standards-compliant ``List-Unsubscribe`` / ``List-Unsubscribe-Post``
+        impossible. MIME also lets us set a friendly From-name, a Reply-To and a
+        proper multipart/alternative (plain-text + HTML) body — all of which
+        help inbox placement.
+        """
+        msg = EmailMessage()
+        msg['Subject'] = subject
+        msg['From'] = formataddr((from_name or self.sender_email, self.sender_email))
+        msg['To'] = ', '.join(e.strip() for e in to_emails)
+        if cc_emails:
+            msg['Cc'] = ', '.join(e.strip() for e in cc_emails)
+        if reply_to:
+            msg['Reply-To'] = reply_to
+        msg['Date'] = formatdate(localtime=True)
+        msg['Message-ID'] = make_msgid(domain=self.sender_email.split('@')[-1])
+
+        lu, lu_post = _list_unsubscribe_header(list_unsubscribe_url, self.unsub_mailto)
+        if lu:
+            msg['List-Unsubscribe'] = lu
+            msg['List-Unsubscribe-Post'] = lu_post
+
+        # multipart/alternative: text first, HTML preferred.
+        # Force base64 transfer-encoding: quoted-printable soft-wraps long lines
+        # with '=' breaks, and Graph/Outlook can mangle those into visible
+        # artefacts (e.g. "Microsoft =ac applications"). base64 has no such
+        # line-break ambiguity.
+        if body_text and body_html:
+            msg.set_content(body_text, cte='base64')
+            msg.add_alternative(body_html, subtype='html', cte='base64')
+        elif body_html:
+            msg.set_content('This message requires an HTML-capable email client.', cte='base64')
+            msg.add_alternative(body_html, subtype='html', cte='base64')
+        else:
+            msg.set_content(body_text or '', cte='base64')
+
+        return msg.as_bytes()
+
     def send_email(self, to_emails: List[str], subject: str,
                    body_html: str = None, body_text: str = None,
-                   cc_emails: List[str] = None) -> Dict[str, Any]:
+                   cc_emails: List[str] = None, *,
+                   from_name: str = None, reply_to: str = None,
+                   list_unsubscribe_url: str = None) -> Dict[str, Any]:
         try:
             token = self._get_access_token()
 
@@ -185,31 +281,21 @@ class M365EmailProvider(EmailProvider):
             if not body_html and not body_text:
                 raise ValueError("Either body_html or body_text must be provided")
 
-            to_recipients = [{"emailAddress": {"address": e.strip()}} for e in to_emails]
-            cc_recipients = [{"emailAddress": {"address": e.strip()}} for e in (cc_emails or [])]
-
-            message = {
-                "message": {
-                    "subject": subject,
-                    "body": {
-                        "contentType": "HTML" if body_html else "Text",
-                        "content": body_html if body_html else body_text
-                    },
-                    "toRecipients": to_recipients
-                }
-            }
-
-            if cc_recipients:
-                message["message"]["ccRecipients"] = cc_recipients
+            mime_bytes = self._build_mime(
+                to_emails, subject, body_html, body_text, cc_emails,
+                from_name or self.from_name,
+                reply_to if reply_to is not None else self.reply_to,
+                list_unsubscribe_url,
+            )
 
             headers = {
                 'Authorization': f'Bearer {token}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'text/plain',  # base64-encoded MIME payload
             }
 
             send_url = f"{self.graph_url}/users/{self.sender_email}/sendMail"
             response = requests.post(send_url, headers=headers,
-                                     data=json.dumps(message), timeout=30)
+                                     data=base64.b64encode(mime_bytes), timeout=30)
 
             if response.status_code == 202:
                 return {
@@ -395,9 +481,20 @@ class ResendEmailProvider(EmailProvider):
         if not self.from_email:
             raise ValueError("Missing RESEND_FROM_EMAIL")
 
+        self.from_name, self.reply_to, self.unsub_mailto = _resolve_sender_identity(config, self.from_email)
+
+    def _format_from(self, from_name: str) -> str:
+        """Return the From value, adding the display name unless the configured
+        RESEND_FROM_EMAIL already includes one (e.g. 'Name <a@b.com>')."""
+        if from_name and '<' not in self.from_email:
+            return formataddr((from_name, self.from_email))
+        return self.from_email
+
     def send_email(self, to_emails: List[str], subject: str,
                    body_html: str = None, body_text: str = None,
-                   cc_emails: List[str] = None) -> Dict[str, Any]:
+                   cc_emails: List[str] = None, *,
+                   from_name: str = None, reply_to: str = None,
+                   list_unsubscribe_url: str = None) -> Dict[str, Any]:
         try:
             import resend as resend_lib
             resend_lib.api_key = self.api_key
@@ -408,7 +505,7 @@ class ResendEmailProvider(EmailProvider):
                 raise ValueError("Either body_html or body_text must be provided")
 
             params: Dict[str, Any] = {
-                "from": self.from_email,
+                "from": self._format_from(from_name or self.from_name),
                 "to": [e.strip() for e in to_emails],
                 "subject": subject,
             }
@@ -418,6 +515,17 @@ class ResendEmailProvider(EmailProvider):
                 params["text"] = body_text
             if cc_emails:
                 params["cc"] = [e.strip() for e in cc_emails]
+
+            rt = reply_to if reply_to is not None else self.reply_to
+            if rt:
+                params["reply_to"] = rt
+
+            lu, lu_post = _list_unsubscribe_header(list_unsubscribe_url, self.unsub_mailto)
+            if lu:
+                params["headers"] = {
+                    "List-Unsubscribe": lu,
+                    "List-Unsubscribe-Post": lu_post,
+                }
 
             resend_lib.Emails.send(params)
 
@@ -452,7 +560,9 @@ class NoopEmailProvider(EmailProvider):
 
     def send_email(self, to_emails: List[str], subject: str,
                    body_html: str = None, body_text: str = None,
-                   cc_emails: List[str] = None) -> Dict[str, Any]:
+                   cc_emails: List[str] = None, *,
+                   from_name: str = None, reply_to: str = None,
+                   list_unsubscribe_url: str = None) -> Dict[str, Any]:
         print(f"[NoopEmailProvider] Would send '{subject}' to {to_emails}")
         return {
             "success": False,
