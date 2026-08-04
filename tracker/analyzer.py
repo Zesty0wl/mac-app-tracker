@@ -125,6 +125,7 @@ class MicrosoftAppAnalyzer:
             print("=" * 60)
 
             main_package = None
+            pkg_id_match = None
             for pkg_info_path in package_info_files:
                 info, bundles, raw_xml = self.parse_package_info(pkg_info_path)
                 if not info:
@@ -158,6 +159,11 @@ class MicrosoftAppAnalyzer:
                     if self.expected_identifier:
                         if any(bundle["id"] == self.expected_identifier for bundle in bundles):
                             main_package = package_data
+                        elif not pkg_id_match and info["identifier"] == self.expected_identifier:
+                            # Some packages (e.g. Global Secure Access) carry the
+                            # expected identifier on the PackageInfo itself while
+                            # the only payload bundle is an uninstaller.
+                            pkg_id_match = package_data
                     elif not main_package:
                         main_package = package_data
 
@@ -167,6 +173,8 @@ class MicrosoftAppAnalyzer:
                     download_result.file_path,
                 )
             else:
+                if not main_package:
+                    main_package = pkg_id_match
                 if not main_package:
                     print("✗ Could not identify main package")
                     return None
@@ -323,6 +331,13 @@ class MicrosoftAppAnalyzer:
             return info["identifier"]
         # For single packages, prefer bundle ID if available
         if bundles and bundles[0].get("id"):
+            # ...unless the catalogue expects the PackageInfo identifier and no
+            # payload bundle carries it (uninstaller-only payloads) — keep the
+            # pkg identifier so identifier-keyed lookups still match.
+            if (self.expected_identifier
+                    and info["identifier"] == self.expected_identifier
+                    and not any(b.get("id") == self.expected_identifier for b in bundles)):
+                return info["identifier"]
             return bundles[0]["id"]
         return info["identifier"]
 
