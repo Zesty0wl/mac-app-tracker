@@ -2,6 +2,17 @@
 
 Notable changes to the Mac Apps Version Tracker.
 
+## [1.2.1] - 2026-08-04
+
+### Changed
+- Removed deployment-specific content so the repo stays cleanly reusable:
+  the subscribe-success page no longer carries an instance-specific delivery
+  notice (use `TEMPLATE_OVERRIDE_DIR` for content like that), a one-off
+  operational script was dropped from `tools/`, and the GitHub API
+  User-Agent and admin-panel example URL are now generic.
+- Added `CLAUDE.md` with contributor guidance on keeping instance-specific
+  content out of the repo.
+
 ## [1.2.0] - 2026-08-04
 
 ### Added
@@ -9,8 +20,6 @@ Notable changes to the Mac Apps Version Tracker.
   Recipient is the new `suggestion_notify_email` setting (Admin → Email
   Settings); leave blank to disable. Sends in the background so a mail
   failure never affects the public submission.
-- Global Secure Access Client is now tracked (promoted from community
-  suggestion #2).
 - Analyzer support for packages whose payload contains only an uninstaller
   `.app` (e.g. Global Secure Access): when no payload bundle carries the
   expected identifier, the PackageInfo package identifier is matched and
@@ -22,8 +31,8 @@ Notable changes to the Mac Apps Version Tracker.
 - Subscription confirmation links now stay valid for 8 weeks (was 7 days),
   and confirmation/reminder emails include a one-click opt-out that also
   works for not-yet-confirmed recipients.
-- The subscribe-success page now walks new subscribers through finding the
-  confirmation email in spam/junk and marking it "Not spam".
+- The subscribe-success page gives clearer next steps, including checking
+  spam/junk folders and marking the confirmation email "Not spam".
 - Download-cache detection uses `actual_url` + `Content-Length` as the
   change signal for CDNs that serve no usable ETag/Last-Modified headers
   (Microsoft onecdn, download.msappproxy.net).

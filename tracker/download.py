@@ -165,7 +165,7 @@ class PackageDownloader:
         print(f"Querying GitHub release: {api_url}")
         request = Request(api_url, headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": "appledevicepolicy-tracker",
+            "User-Agent": "mac-app-tracker",
         })
         token = os.environ.get("GITHUB_TOKEN")
         if token:
