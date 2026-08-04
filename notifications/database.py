@@ -15,11 +15,13 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 
-# How long a confirmation link stays valid. Kept generous (a full week) so
-# people who sign up and only check their mail a day or two later — or over a
-# weekend — still land on a live link instead of an "expired" error. This is
-# the single source of truth; copy shown to users should match it.
-CONFIRM_TOKEN_TTL_DAYS = 7
+# How long a confirmation link stays valid. Kept very generous (8 weeks) so a
+# signup whose confirmation mail lands in spam still works when the recipient
+# eventually digs it out weeks later, instead of hitting an "expired" error.
+# Must be paired with cleanup disabled (or its window set beyond this), since
+# cleanup deletes the subscriber row — and the token with it — independently of
+# this value. This is the single source of truth; user-facing copy matches it.
+CONFIRM_TOKEN_TTL_DAYS = 56
 
 
 @dataclass
@@ -368,24 +370,35 @@ class SubscriptionDatabase:
             conn.commit()
             return True
     
-    def generate_unsubscribe_token(self, email: str) -> Optional[str]:
+    def generate_unsubscribe_token(self, email: str, require_confirmed: bool = True) -> Optional[str]:
         """
         Generate an unsubscribe token for an email
-        
+
         Args:
             email: Email address
-            
+            require_confirmed: when True (default) a token is only issued to a
+                confirmed subscriber — the normal case for notification mail.
+                Pass False for confirmation/reminder mail so a not-yet-confirmed
+                recipient still gets a working one-click opt-out / "this wasn't
+                me" link (the most important alternative to the spam button).
+
         Returns:
             Unsubscribe token or None if email not found
         """
         email_hash = self._hash_email(email)
-        
+
         with sqlite3.connect(self.db_path) as conn:
             # Find subscriber
-            cursor = conn.execute(
-                "SELECT id FROM subscribers WHERE email_hash = ? AND confirmed = TRUE AND active = TRUE",
-                (email_hash,)
-            )
+            if require_confirmed:
+                cursor = conn.execute(
+                    "SELECT id FROM subscribers WHERE email_hash = ? AND confirmed = TRUE AND active = TRUE",
+                    (email_hash,)
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT id FROM subscribers WHERE email_hash = ? AND active = TRUE",
+                    (email_hash,)
+                )
             result = cursor.fetchone()
             
             if not result:

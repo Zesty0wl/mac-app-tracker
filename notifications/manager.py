@@ -221,7 +221,13 @@ class SubscriptionManager:
         """
         try:
             confirmation_url = f"{self.base_url}/confirm-subscription?token={token}"
-            expiry_text = f"{CONFIRM_TOKEN_TTL_DAYS} days"
+            # One-click opt-out for people who didn't sign up — gives them an exit
+            # other than the spam button (works even though they're unconfirmed).
+            optout_token = self.db.generate_unsubscribe_token(email, require_confirmed=False)
+            optout_url = f"{self.base_url}/unsubscribe?token={optout_token}" if optout_token else None
+            expiry_text = (f"{CONFIRM_TOKEN_TTL_DAYS // 7} weeks"
+                           if CONFIRM_TOKEN_TTL_DAYS % 7 == 0
+                           else f"{CONFIRM_TOKEN_TTL_DAYS} days")
 
             # Determine subscription description
             if not app_ids:
@@ -249,13 +255,18 @@ class SubscriptionManager:
                     + app_list_html + '</ul>'
                 )
 
+            optout_html = (
+                (f' Or <a href="{optout_url}" style="color:#6b7280;">remove your address</a>'
+                 " and we won't contact you again.")
+                if optout_url else ''
+            )
             inner = f"""<p style="margin:0 0 16px;">Hi,</p>
 <p style="margin:0 0 16px;">Thanks for subscribing to {brand}. You asked to be notified about <strong>{subscription_desc}</strong>.</p>
 {apps_block_html}<p style="margin:0 0 18px;">Please confirm your email address to activate your subscription:</p>
 {email_button(confirmation_url, "Confirm subscription")}
 <p style="margin:18px 0 0;font-size:13px;color:#6b7280;">This link is valid for {expiry_text}. If the button doesn't work, copy and paste this address into your browser:<br>
 <a href="{confirmation_url}" style="color:{_EMAIL_ACCENT};word-break:break-all;">{confirmation_url}</a></p>
-<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">If you didn't request this, you can safely ignore this email &mdash; nothing is activated without your confirmation.</p>"""
+<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">If you didn't request this, you can safely ignore this email &mdash; nothing is activated without your confirmation.{optout_html}</p>"""
 
             html_body = render_email_shell(
                 brand, home_url, inner,
@@ -274,11 +285,19 @@ class SubscriptionManager:
                 confirmation_url, "",
                 f"This link is valid for {expiry_text}. If you didn't request this, you can ignore "
                 "this email — nothing is activated without your confirmation.", "",
-                f"Sent by {brand} — {home_url}",
             ]
+            if optout_url:
+                text_lines += [
+                    f"Didn't sign up? Remove your address here and we won't contact you again:\n{optout_url}",
+                    "",
+                ]
+            text_lines += [f"Sent by {brand} — {home_url}"]
             text_body = "\n".join(text_lines)
 
-            result = self.email_notifier.send_email([email], subject, html_body, text_body)
+            result = self.email_notifier.send_email(
+                [email], subject, html_body, text_body,
+                list_unsubscribe_url=optout_url,
+            )
             return result['success']
             
         except Exception as e:
@@ -786,23 +805,33 @@ Sent by {brand}. Visit <a href="{home_url}" style="color:#9aa1ac;">{domain}</a>.
 
 
 def build_confirmation_reminder(brand: str, confirmation_url: str,
-                                expiry_text: str, home_url: str) -> Tuple[str, str]:
+                                expiry_text: str, home_url: str,
+                                optout_url: str = None) -> Tuple[str, str]:
     """Build the (html, text) bodies for a confirmation-reminder email.
 
     Same clean shell as the original opt-in email, led by why it matters (the
     subscription is inactive until confirmed) so it converts rather than reading
-    like a duplicate.
+    like a duplicate. A one-click opt-out link is included so a recipient who
+    didn't sign up has an exit other than the spam button.
     """
+    optout_html = (
+        f' Or <a href="{optout_url}" style="color:#6b7280;">remove your address</a>.'
+        if optout_url else ''
+    )
     inner = f"""<p style="margin:0 0 16px;">Hi,</p>
 <p style="margin:0 0 16px;">You signed up for {brand} update notifications, but your email address hasn't been confirmed yet &mdash; so your subscription is <strong>not active</strong> and nothing is being sent to you.</p>
 <p style="margin:0 0 18px;">Confirm your email to activate it:</p>
 {email_button(confirmation_url, "Confirm subscription")}
 <p style="margin:18px 0 0;font-size:13px;color:#6b7280;">This link is valid for {expiry_text}. If the button doesn't work, copy and paste this address into your browser:<br>
 <a href="{confirmation_url}" style="color:{_EMAIL_ACCENT};word-break:break-all;">{confirmation_url}</a></p>
-<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">Didn't sign up? You can ignore this email &mdash; we won't contact you again.</p>"""
+<p style="margin:22px 0 0;font-size:13px;color:#6b7280;">Didn't sign up? You can ignore this email &mdash; we won't contact you again.{optout_html}</p>"""
     html = render_email_shell(
         brand, home_url, inner,
         preheader=f"Please confirm your email to activate {brand} notifications.",
+    )
+    optout_text = (
+        f"\nDidn't sign up? Remove your address here:\n{optout_url}\n"
+        if optout_url else ''
     )
     text = (
         f"{brand}\n\n"
@@ -812,6 +841,7 @@ def build_confirmation_reminder(brand: str, confirmation_url: str,
         f"Confirm your email to activate it:\n{confirmation_url}\n\n"
         f"This link is valid for {expiry_text}. If you didn't sign up, just ignore this "
         f"email and we won't contact you again.\n"
+        f"{optout_text}"
     )
     return html, text
 
@@ -831,7 +861,9 @@ def send_confirmation_reminders(sub_db, provider, site_url: str, brand: str = No
     log = logger or (lambda m: None)
     brand = brand or os.environ.get('EMAIL_BRAND_NAME',
                                     os.environ.get('SITE_NAME', 'Mac Apps Version Tracker'))
-    expiry_text = f"{CONFIRM_TOKEN_TTL_DAYS} days"
+    expiry_text = (f"{CONFIRM_TOKEN_TTL_DAYS // 7} weeks"
+                   if CONFIRM_TOKEN_TTL_DAYS % 7 == 0
+                   else f"{CONFIRM_TOKEN_TTL_DAYS} days")
     home_url = f"{site_url}{script_name}" if site_url else ""
 
     pending = sub_db.get_unconfirmed_needing_reminder(days, max_reminders=max_reminders)
@@ -844,13 +876,18 @@ def send_confirmation_reminders(sub_db, provider, site_url: str, brand: str = No
             continue
         token, _app_ids = result
         confirmation_url = f"{site_url}{script_name}/confirm-subscription?token={token}"
-        html, text = build_confirmation_reminder(brand, confirmation_url, expiry_text, home_url)
+        optout_token = sub_db.generate_unsubscribe_token(email, require_confirmed=False)
+        optout_url = (f"{site_url}{script_name}/unsubscribe?token={optout_token}"
+                      if optout_token else None)
+        html, text = build_confirmation_reminder(brand, confirmation_url, expiry_text,
+                                                 home_url, optout_url)
         try:
             provider.send_email(
                 to_emails=[email],
                 subject=f"Action needed: confirm your {brand} subscription",
                 body_html=html,
                 body_text=text,
+                list_unsubscribe_url=optout_url,
             )
             sub_db.mark_reminder_sent(sub['id'])
             sent += 1
