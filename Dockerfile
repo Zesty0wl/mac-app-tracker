@@ -18,7 +18,6 @@ COPY scheduler.py .
 COPY enhanced_tracker.py .
 COPY requirements.txt .
 COPY VERSION .
-COPY .env .
 COPY templates/ templates/
 COPY static/ static/
 COPY tracker/ tracker/

@@ -19,7 +19,50 @@ Originally built for Microsoft Mac apps (Company Portal, Defender, Edge, Office)
 
 ## Quick Start
 
-### Docker Compose (recommended)
+### Prebuilt image (recommended)
+
+Multi-arch images (amd64 + arm64) are published to GitHub Container
+Registry on every release — no clone or build needed. Create a directory
+with a `docker-compose.yml`:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/zesty0wl/mac-app-tracker:latest
+    container_name: mac-app-tracker
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/data/microsoft_apps_versions.db
+      - SUBSCRIPTION_DB_PATH=/data/subscriptions.db
+    restart: unless-stopped
+```
+
+Then configure and start it:
+
+```bash
+curl -fsSLo .env https://raw.githubusercontent.com/Zesty0wl/mac-app-tracker/main/.env.template
+
+# Generate the two required secrets and write them into .env
+sed -i "s|^FLASK_SECRET_KEY=.*|FLASK_SECRET_KEY=$(openssl rand -hex 32)|" .env
+sed -i "s|^ADMIN_JWT_SECRET=.*|ADMIN_JWT_SECRET=$(openssl rand -hex 32)|" .env
+
+# Set a strong ADMIN_PASSWORD and SITE_URL, then optionally add email
+# provider credentials.
+$EDITOR .env
+
+docker compose up -d
+```
+
+Available tags: `latest` (current main), `<version>` (e.g. `1.3.0`), and
+`sha-<short sha>` for pinning exact builds. To update later:
+`docker compose pull && docker compose up -d`.
+
+### Build from source
 
 ```bash
 git clone https://github.com/Zesty0wl/mac-app-tracker.git
@@ -35,6 +78,7 @@ sed -i "s|^ADMIN_JWT_SECRET=.*|ADMIN_JWT_SECRET=$(openssl rand -hex 32)|" .env
 # provider credentials.
 $EDITOR .env
 
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build
 docker compose up -d
 ```
 

@@ -2,6 +2,21 @@
 
 Notable changes to the Mac Apps Version Tracker.
 
+## [1.3.0] - 2026-08-04
+
+### Added
+- Prebuilt multi-arch Docker images (linux/amd64 + linux/arm64), published
+  to GitHub Container Registry on every push to main as
+  `ghcr.io/zesty0wl/mac-app-tracker` with `latest`, `<version>` and
+  `sha-<short sha>` tags. README and DEPLOYMENT now document image-based
+  deployment as the recommended path — no clone or build required.
+
+### Fixed
+- The Dockerfile no longer copies `.env` into the image, so local builds
+  cannot bake secrets into a shareable image. Runtime configuration comes
+  from docker-compose `env_file` (as before) and a new `.dockerignore`
+  keeps secrets, databases and downloads out of the build context.
+
 ## [1.2.1] - 2026-08-04
 
 ### Changed

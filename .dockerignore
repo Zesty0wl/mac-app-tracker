@@ -1,0 +1,16 @@
+# Never bake secrets or runtime data into images
+.env
+data/
+downloads/
+*.db
+*.db.*
+
+# Not needed in the build context
+.git/
+.github/
+__pycache__/
+*.py[cod]
+docker-compose*.yml
+nginx/
+tools/
+*.md

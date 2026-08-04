@@ -1,60 +1,41 @@
-# Deployment Summary
+# Deployment
 
-## Docker Container
+## Docker (recommended)
 
-The Mac Apps Version Tracker is now deployed as a Docker container.
+The tracker runs as a single Docker container (web app + hourly scheduler)
+listening on port 5000, with all state in a `/data` volume. Put a reverse
+proxy in front of it for production (see `nginx/` for a sample config).
 
-### Status
-- **Container Name**: intune-mac-tracker
-- **Local Port**: 5000
-- **Public URL**: http://localhost:5000 (configure reverse proxy for production)
-- **Status**: Running with auto-restart
+### Prebuilt images
 
-### Features
-- ✅ Automatic hourly version checks
-- ✅ HTTP header-based change detection (ETag/Last-Modified)
-- ✅ Modern web UI for browsing version history
-- ✅ Persistent database in `./data/` directory
-- ✅ Automatic cleanup of downloaded packages
+Multi-arch images (linux/amd64 + linux/arm64) are published to GitHub
+Container Registry by `.github/workflows/docker-publish.yml` on every push
+to main:
+
+- `ghcr.io/zesty0wl/mac-app-tracker:latest` — current main
+- `ghcr.io/zesty0wl/mac-app-tracker:<version>` — e.g. `1.3.0`, from the `VERSION` file
+- `ghcr.io/zesty0wl/mac-app-tracker:sha-<short sha>` — pin an exact build
+
+See the README Quick Start for a ready-to-use `docker-compose.yml`. Update
+with `docker compose pull && docker compose up -d`.
 
 ### Management Commands
 
-#### View Logs
 ```bash
-docker-compose logs -f
-```
-
-#### Restart Container
-```bash
-docker-compose restart
-```
-
-#### Stop Container
-```bash
-docker-compose down
-```
-
-#### Start Container
-```bash
-docker-compose up -d
-```
-
-#### Rebuild Container
-```bash
-docker-compose up --build -d
+docker compose logs -f        # view logs
+docker compose restart        # restart
+docker compose down           # stop
+docker compose up -d          # start (pulls the image if missing)
+docker compose pull && docker compose up -d   # update to latest published image
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build   # rebuild from source
 ```
 
 ### Database Location
 - Container: `/data/microsoft_apps_versions.db`
 - Host: `./data/microsoft_apps_versions.db`
 
-### Nginx Configuration
-Location: `/etc/nginx/sites-available/appledevicepolicy`
-
-The `/app-tracker` path proxies to `localhost:5000`
-
 ### Scheduler
-The container runs a scheduler that checks for new versions every hour (3600 seconds). Logs are visible via `docker-compose logs -f`.
+The container runs a scheduler that checks for new versions every hour (3600 seconds). Logs are visible via `docker compose logs -f`.
 
 ### Health Check
 The container includes a health check that verifies the API is responding every 30 seconds.
