@@ -14,14 +14,17 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from werkzeug.middleware.proxy_fix import ProxyFix
 from tracker.database import VersionDatabase
 from notifications.manager import SubscriptionManager
+from notifications.providers import get_email_provider
 from tracker.config import load_apps_config, build_identifier_lookup
 import admin.database as adb
 from admin import admin_bp
 from suggestions import database as sdb
+import html
 import os
 import json
 import logging
 import subprocess
+import threading
 from pathlib import Path
 
 
@@ -797,6 +800,71 @@ def _client_voter_hash() -> str:
     return sdb.voter_hash(ip, ua)
 
 
+def _notify_admin_new_suggestion(sid: int, suggestion: dict) -> threading.Thread:
+    """Email the configured address (``suggestion_notify_email``) about a new
+    suggestion.
+
+    Runs in a daemon thread so a slow or failed send never delays or breaks
+    the public submission response. Skips silently when no address is set.
+    """
+    def _send():
+        try:
+            recipient = (adb.get_email_setting('suggestion_notify_email') or '').strip()
+            if not recipient:
+                return
+            site_url = (adb.get_email_setting('site_url')
+                        or os.environ.get('SITE_URL', '')).rstrip('/')
+            moderation_url = f'{site_url}/admin/suggestions' if site_url else ''
+
+            fields = [
+                ('Name', suggestion.get('name', '')),
+                ('Identifier', suggestion.get('identifier', '')),
+                ('Download URL', suggestion.get('download_url', '')),
+                ('Release notes URL', suggestion.get('release_notes_url', '')),
+                ('Description', suggestion.get('description', '')),
+                ('Submitter email', suggestion.get('submitter_email', '')),
+            ]
+
+            text_lines = [f'A new app suggestion (#{sid}) was submitted.', '']
+            text_lines += [f'{label}: {value or "(not provided)"}' for label, value in fields]
+            if moderation_url:
+                text_lines += ['', f'Review it here: {moderation_url}']
+            text_body = '\n'.join(text_lines)
+
+            rows = ''.join(
+                f'<tr><td style="padding:4px 12px 4px 0;color:#666;white-space:nowrap;'
+                f'vertical-align:top;">{html.escape(label)}</td>'
+                f'<td style="padding:4px 0;">{html.escape(value) or "(not provided)"}</td></tr>'
+                for label, value in fields
+            )
+            html_body = (
+                '<html><body style="font-family:Arial,sans-serif;margin:20px;color:#222;">'
+                f'<p>A new app suggestion (#{sid}) was submitted.</p>'
+                f'<table style="border-collapse:collapse;font-size:14px;">{rows}</table>'
+                + (f'<p><a href="{html.escape(moderation_url)}">Review it in the admin panel</a></p>'
+                   if moderation_url else '')
+                + '</body></html>'
+            )
+
+            result = get_email_provider().send_email(
+                [recipient],
+                f'New app suggestion: {suggestion.get("name", "")}',
+                html_body,
+                text_body,
+            )
+            if not result.get('success'):
+                adb.add_log('WARN', 'suggestions',
+                            f'Notification email for suggestion #{sid} failed: '
+                            f'{result.get("message", "unknown error")}')
+        except Exception as e:
+            adb.add_log('WARN', 'suggestions',
+                        f'Notification email for suggestion #{sid} failed: {e}')
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+    return thread
+
+
 @app.route('/suggest')
 def suggest_page():
     """Public page combining the suggestion form and the voting list."""
@@ -876,23 +944,22 @@ def api_submit_suggestion():
                     'error': f'"{name}" is already in the tracker.'
                 }), 409
 
-    sid = sdb.add_suggestion(
-        {
-            'name': name,
-            'identifier': identifier,
-            'download_url': download_url,
-            'release_notes_url': release_notes_url,
-            'description': description,
-            'submitter_email': submitter_email,
-        },
-        submitter_hash=_client_voter_hash(),
-    )
+    payload = {
+        'name': name,
+        'identifier': identifier,
+        'download_url': download_url,
+        'release_notes_url': release_notes_url,
+        'description': description,
+        'submitter_email': submitter_email,
+    }
+    sid = sdb.add_suggestion(payload, submitter_hash=_client_voter_hash())
     if sid is None:
         return jsonify({'error': 'A suggestion with that name or identifier already exists'}), 409
 
     # New suggestions start as 'pending' and cannot be voted on until an
     # admin approves them, so we don't auto-cast a vote here.
     adb.add_log('INFO', 'suggestions', f'New app suggestion: {name} (#{sid})')
+    _notify_admin_new_suggestion(sid, payload)
     return jsonify({'ok': True, 'id': sid}), 201
 
 

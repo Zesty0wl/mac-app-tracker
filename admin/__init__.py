@@ -311,7 +311,7 @@ def api_save_email_settings():
     allowed_keys = {
         'provider', 'm365_client_id', 'm365_client_secret', 'm365_tenant_id',
         'sender_email', 'resend_api_key', 'resend_from_email',
-        'notification_recipients', 'site_url',
+        'notification_recipients', 'suggestion_notify_email', 'site_url',
     }
     filtered = {k: v for k, v in data.items() if k in allowed_keys}
     adb.save_email_settings(filtered)
