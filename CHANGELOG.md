@@ -2,6 +2,15 @@
 
 Notable changes to the Mac Apps Version Tracker.
 
+## [1.3.1] - 2026-08-11
+
+### Fixed
+- The analyzer no longer mistakes AppleDouble sidecar files (`._Foo.app`,
+  emitted when a package is built on macOS with extended attributes) for
+  real `.app` bundles. Bundle discovery now only considers directories, so
+  flat packages whose payload ships alongside AppleDouble artifacts analyze
+  correctly instead of failing with "No Info.plist found".
+
 ## [1.3.0] - 2026-08-04
 
 ### Added

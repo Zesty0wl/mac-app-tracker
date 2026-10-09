@@ -51,12 +51,15 @@ class PackageExtractor:
         """Find .app bundles at the top level or one level deep (e.g. DMG volumes).
 
         Excludes .app bundles nested inside another .app (frameworks, plugins).
+        Real bundles are directories; AppleDouble sidecars (``._Foo.app``) are
+        plain files, so anything that is not a directory is skipped.
         """
-        bundles = list(Path(directory).glob("*.app"))
+        bundles = [p for p in Path(directory).glob("*.app") if p.is_dir()]
         if not bundles:
             bundles = [
                 p for p in Path(directory).rglob("*.app")
-                if not any(part.endswith(".app") for part in p.relative_to(directory).parts[:-1])
+                if p.is_dir()
+                and not any(part.endswith(".app") for part in p.relative_to(directory).parts[:-1])
             ]
         return bundles
 
