@@ -2,7 +2,7 @@
 
 Notable changes to the Mac Apps Version Tracker.
 
-## [Unreleased]
+## [1.4.0] - 2026-10-09
 
 ### Changed
 - Analytics now uses Quick Web Analytics instead of Plausible. Replace
