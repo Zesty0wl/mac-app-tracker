@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Suggest an App to Track — {{ site_name }}</title>
     <meta name="description" content="Suggest a new macOS application for {{ site_name }} to track and vote on community-submitted ideas.">
-    {% if plausible_domain and plausible_script_url %}
-    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% if qwa_site and qwa_script_url %}
+    <script defer src="{{ qwa_script_url }}" data-site="{{ qwa_site }}"></script>
+    <script>window.qwa = window.qwa || function() { (window.qwa.q = window.qwa.q || []).push(arguments) }</script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
     <style>
@@ -444,6 +445,7 @@
                         return;
                     }
                     markVoted(id);
+                    if (window.qwa) qwa('Suggestion Upvote');
                     // Update counts in our local list and re-render so the
                     // progress bar / sort order reflect the new tally.
                     const item = allSuggestions.find(s => s.id === id);
@@ -572,6 +574,7 @@
                     });
                     const data = await r.json().catch(() => ({}));
                     if (r.status === 201) {
+                        if (window.qwa) qwa('App Suggested');
                         formMsg.className = 'form-msg success';
                         formMsg.textContent = 'Thanks! Your suggestion has been submitted and will appear once a moderator approves it.';
                         if (data.id) markVoted(data.id);

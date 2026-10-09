@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Confirmation Link Problem</title>
-    {% if plausible_domain and plausible_script_url %}
-    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% if qwa_site and qwa_script_url %}
+    <script defer src="{{ qwa_script_url }}" data-site="{{ qwa_site }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
     <style>
@@ -295,7 +295,7 @@
                 <p>Enter the email address you signed up with and we&rsquo;ll send a new link straight away.</p>
                 <form method="POST" action="{{ url_for('resend_confirmation') }}" class="resend-row">
                     <input type="email" name="email" placeholder="your@email.com" required>
-                    <button type="submit" class="resend-btn">Resend link</button>
+                    <button type="submit" class="resend-btn qwa-event-name=Resend+Confirmation qwa-event-page=confirm_error">Resend link</button>
                 </form>
             </div>
 

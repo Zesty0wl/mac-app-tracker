@@ -190,8 +190,8 @@ APPS_BY_IDENTIFIER = build_identifier_lookup(APPS_CONFIG)
 @app.context_processor
 def inject_site_config():
     return {
-        'plausible_domain': os.environ.get('PLAUSIBLE_DOMAIN', ''),
-        'plausible_script_url': os.environ.get('PLAUSIBLE_SCRIPT_URL', ''),
+        'qwa_site': os.environ.get('QWA_SITE', ''),
+        'qwa_script_url': os.environ.get('QWA_SCRIPT_URL', ''),
         'contact_email': os.environ.get('CONTACT_EMAIL', ''),
     }
 

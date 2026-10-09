@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Confirm your email to activate notifications</title>
-    {% if plausible_domain and plausible_script_url %}
-    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% if qwa_site and qwa_script_url %}
+    <script defer src="{{ qwa_script_url }}" data-site="{{ qwa_site }}"></script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
     <style>
@@ -215,7 +215,7 @@
                 <span>Didn&rsquo;t receive it?</span>
                 <form method="POST" action="{{ url_for('resend_confirmation') }}">
                     <input type="hidden" name="email" value="{{ email }}">
-                    <button type="submit">Resend email</button>
+                    <button type="submit" class="qwa-event-name=Resend+Confirmation qwa-event-page=subscribe_success">Resend email</button>
                 </form>
             </div>
 

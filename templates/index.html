@@ -44,8 +44,9 @@
     {% if dev_mode %}
     <meta name="robots" content="noindex, nofollow">
     {% endif %}
-    {% if plausible_domain and plausible_script_url %}
-    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% if qwa_site and qwa_script_url %}
+    <script defer src="{{ qwa_script_url }}" data-site="{{ qwa_site }}"></script>
+    <script>window.qwa = window.qwa || function() { (window.qwa.q = window.qwa.q || []).push(arguments) }</script>
     {% endif %}
     
     <!-- Cal-Heatmap dependencies -->
@@ -1067,6 +1068,7 @@
                         
                         const appName = selectedOption.textContent;
                         const downloadUrl = selectedOption.dataset.downloadUrl;
+                        if (window.qwa) qwa('App Selected', { props: { app: appName } });
                         selectApp(e.target.value, appName, downloadUrl, selectedOption.dataset.releaseNotesUrl);
                     }
                 });
@@ -1728,6 +1730,7 @@
         // Copy to clipboard function
         function copyToClipboard(text, button) {
             navigator.clipboard.writeText(text).then(() => {
+                if (window.qwa) qwa('Copy', { props: { type: /^https?:/i.test(text) ? 'url' : 'checksum' } });
                 // Visual feedback
                 button.classList.add('copied');
                 const originalHTML = button.innerHTML;

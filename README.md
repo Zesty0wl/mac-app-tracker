@@ -203,8 +203,8 @@ vars.
 
 | Variable | Required | Description |
 |---|---|---|
-| `PLAUSIBLE_DOMAIN` | No | Plausible analytics domain (e.g. `tracker.example.com`) |
-| `PLAUSIBLE_SCRIPT_URL` | No | Plausible script URL (e.g. `https://plausible.io/js/script.js`) |
+| `QWA_SITE` | No | Quick Web Analytics site ID (e.g. `tracker.example.com`) |
+| `QWA_SCRIPT_URL` | No | Quick Web Analytics script URL (e.g. `https://analytics.example.com/t.js`) |
 | `CONTACT_EMAIL` | No | Contact email shown in the UI |
 
 See [`.env.example`](.env.example) for the full list with inline

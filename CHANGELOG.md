@@ -2,6 +2,18 @@
 
 Notable changes to the Mac Apps Version Tracker.
 
+## [Unreleased]
+
+### Changed
+- Analytics now uses Quick Web Analytics instead of Plausible. Replace
+  `PLAUSIBLE_DOMAIN` / `PLAUSIBLE_SCRIPT_URL` with `QWA_SITE` /
+  `QWA_SCRIPT_URL`; the old variables are no longer read.
+
+### Added
+- Custom analytics events: App Selected, Copy (download URL or checksum),
+  Subscribe, Subscription Confirmed, Unsubscribed, Resend Confirmation,
+  App Suggested and Suggestion Upvote.
+
 ## [1.3.1] - 2026-08-11
 
 ### Fixed

@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subscribe to Mac App Notifications</title>
-    {% if plausible_domain and plausible_script_url %}
-    <script defer data-domain="{{ plausible_domain }}" src="{{ plausible_script_url }}"></script>
+    {% if qwa_site and qwa_script_url %}
+    <script defer src="{{ qwa_script_url }}" data-site="{{ qwa_site }}"></script>
+    <script>window.qwa = window.qwa || function() { (window.qwa.q = window.qwa.q || []).push(arguments) }</script>
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/footer.css') }}">
     <style>
@@ -675,7 +676,9 @@
             if (!anyAppSelected) {
                 e.preventDefault();
                 alert('Please select at least one application to monitor.');
+                return;
             }
+            if (window.qwa) qwa('Subscribe', { props: { apps: document.querySelectorAll('input[name="apps"]:checked').length } });
         });
         
         // Initialize button state and selection styling
